@@ -6,8 +6,14 @@
     "scripts": {
         "start": "node server.js",
         "dev": "node server.js",
-        "build": "node-gyp rebuild",
-        "install": "node-gyp rebuild"
+        "build:cmake": "cd native/pcd_parser && mkdir -p build && cd build && cmake -DBUILD_TESTS=OFF .. && make",
+        "build:node": "node-gyp rebuild",
+        "build:copy": "cp native/pcd_parser/build/*.dylib build/Release/ 2>/dev/null || cp native/pcd_parser/build/*.so build/Release/ 2>/dev/null || true",
+        "build:fixrpath": "install_name_tool -change @rpath/libpcd_parser.dylib @loader_path/libpcd_parser.dylib -change @rpath/liblzf.dylib @loader_path/liblzf.dylib build/Release/pcd_parser.node 2>/dev/null || true",
+        "build": "npm run build:cmake && npm run build:node && npm run build:copy && npm run build:fixrpath",
+        "test": "cd native/pcd_parser && mkdir -p build && cd build && cmake .. && make && ctest --output-on-failure",
+        "clean": "rm -rf build native/pcd_parser/build node_modules",
+        "install": "npm run build"
     },
     "dependencies": {
         "cors": "^2.8.5",

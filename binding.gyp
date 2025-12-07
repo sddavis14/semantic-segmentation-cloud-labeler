@@ -5,12 +5,15 @@
       "cflags!": ["-fno-exceptions"],
       "cflags_cc!": ["-fno-exceptions"],
       "sources": [
-        "native/src/pcd_parser.cpp",
-        "native/src/bindings.cpp"
+        "native/node_addon/bindings.cpp"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
-        "native/src"
+        "native/pcd_parser/include"
+      ],
+      "libraries": [
+        "../native/pcd_parser/build/libpcd_parser.dylib",
+        "../native/pcd_parser/build/liblzf.dylib"
       ],
       "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
       "conditions": [
@@ -18,11 +21,15 @@
           "xcode_settings": {
             "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
             "CLANG_CXX_LIBRARY": "libc++",
-            "MACOSX_DEPLOYMENT_TARGET": "10.15"
+            "MACOSX_DEPLOYMENT_TARGET": "15.0"
           }
         }],
         ["OS=='linux'", {
-          "cflags_cc": ["-std=c++17", "-fexceptions"]
+          "cflags_cc": ["-std=c++17", "-fexceptions"],
+          "libraries": [
+            "../native/pcd_parser/build/libpcd_parser.so",
+            "../native/pcd_parser/build/liblzf.so"
+          ]
         }],
         ["OS=='win'", {
           "msvs_settings": {

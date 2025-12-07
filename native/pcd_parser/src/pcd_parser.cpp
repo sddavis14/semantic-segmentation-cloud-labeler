@@ -1,167 +1,9 @@
-#include "pcd_parser.h"
+#include "pcd_parser/pcd_parser.h"
 #include <iomanip>
 #include <iostream>
 
-// LZF decompression implementation for binary_compressed PCD files
-// Based on Marc Lehmann's liblzf (BSD license)
-static size_t lzfDecompress(const void *in_data, size_t in_len, void *out_data,
-                            size_t out_len) {
-  const uint8_t *ip = static_cast<const uint8_t *>(in_data);
-  const uint8_t *ip_end = ip + in_len;
-  uint8_t *op = static_cast<uint8_t *>(out_data);
-  uint8_t *op_end = op + out_len;
-
-  while (ip < ip_end) {
-    unsigned int ctrl = *ip++;
-
-    if (ctrl < 32) {
-      // Literal run
-      unsigned int len = ctrl + 1;
-      if (op + len > op_end || ip + len > ip_end) {
-        return 0; // Output buffer overflow
-      }
-      std::memcpy(op, ip, len);
-      ip += len;
-      op += len;
-    } else {
-      // Back reference
-      unsigned int len = (ctrl >> 5) + 2;
-      unsigned int off = ((ctrl & 0x1f) << 8) + 1;
-
-      if (len == 9) {
-        len += *ip++;
-      }
-      off += *ip++;
-
-      if (op + len > op_end || op - off < static_cast<uint8_t *>(out_data)) {
-        return 0; // Invalid back reference
-      }
-
-      // Copy with overlap handling
-      const uint8_t *ref = op - off;
-      for (unsigned int i = 0; i < len; i++) {
-        *op++ = *ref++;
-      }
-    }
-  }
-
-  return static_cast<size_t>(op - static_cast<uint8_t *>(out_data));
-}
-
-// LZF compression implementation for writing binary_compressed PCD files
-// Based on Marc Lehmann's liblzf (BSD license)
-static size_t lzfCompress(const void *in_data, size_t in_len, void *out_data,
-                          size_t out_len) {
-  const uint8_t *ip = static_cast<const uint8_t *>(in_data);
-  const uint8_t *ip_end = ip + in_len;
-  uint8_t *op = static_cast<uint8_t *>(out_data);
-  uint8_t *op_end = op + out_len;
-
-  // Hash table for finding matches
-  const size_t HTAB_SIZE = 1 << 14; // 16384
-  std::vector<const uint8_t *> htab(HTAB_SIZE, nullptr);
-
-  const uint8_t *lit = ip; // Start of literal run
-
-  if (in_len < 3) {
-    // Data too small to compress, just copy
-    if (in_len && op + in_len + 1 <= op_end) {
-      *op++ = static_cast<uint8_t>(in_len - 1);
-      std::memcpy(op, in_data, in_len);
-      return in_len + 1;
-    }
-    return 0;
-  }
-
-  ip++; // Start at second byte
-
-  while (ip < ip_end - 2) {
-    // Compute hash
-    uint32_t hash = ((ip[0] << 8) | ip[1]) ^ (ip[2] << 5);
-    hash = (hash >> 2) ^ hash;
-    hash &= HTAB_SIZE - 1;
-
-    const uint8_t *ref = htab[hash];
-    htab[hash] = ip;
-
-    // Check for match
-    size_t off;
-    if (ref && (off = ip - ref) <= 8191 &&
-        ref >= static_cast<const uint8_t *>(in_data) && ref[0] == ip[0] &&
-        ref[1] == ip[1] && ref[2] == ip[2]) {
-
-      // Found match, output literals first
-      size_t lit_len = ip - lit;
-      if (lit_len > 0) {
-        // Output literal run
-        if (op + lit_len + 1 >= op_end)
-          return 0;
-
-        while (lit_len > 32) {
-          *op++ = 31; // 32 literals
-          std::memcpy(op, lit, 32);
-          op += 32;
-          lit += 32;
-          lit_len -= 32;
-        }
-        if (lit_len > 0) {
-          *op++ = static_cast<uint8_t>(lit_len - 1);
-          std::memcpy(op, lit, lit_len);
-          op += lit_len;
-        }
-      }
-
-      // Find match length
-      size_t len = 3;
-      size_t max_len =
-          std::min(static_cast<size_t>(ip_end - ip), static_cast<size_t>(264));
-      while (len < max_len && ip[len] == ref[len]) {
-        len++;
-      }
-
-      // Output back reference
-      if (op + 2 >= op_end)
-        return 0;
-
-      if (len <= 8) {
-        *op++ = static_cast<uint8_t>(((len - 2) << 5) | ((off - 1) >> 8));
-        *op++ = static_cast<uint8_t>((off - 1) & 0xFF);
-      } else {
-        *op++ = static_cast<uint8_t>((7 << 5) | ((off - 1) >> 8));
-        *op++ = static_cast<uint8_t>(len - 9);
-        if (op >= op_end)
-          return 0;
-        *op++ = static_cast<uint8_t>((off - 1) & 0xFF);
-      }
-
-      ip += len;
-      lit = ip;
-    } else {
-      ip++;
-    }
-  }
-
-  // Output remaining literals
-  size_t lit_len = ip_end - lit;
-  if (lit_len > 0) {
-    if (op + lit_len + ((lit_len + 31) / 32) >= op_end)
-      return 0;
-
-    while (lit_len > 32) {
-      *op++ = 31;
-      std::memcpy(op, lit, 32);
-      op += 32;
-      lit += 32;
-      lit_len -= 32;
-    }
-    if (lit_len > 0) {
-      *op++ = static_cast<uint8_t>(lit_len - 1);
-      std::memcpy(op, lit, lit_len);
-      op += lit_len;
-    }
-  }
-
-  return static_cast<size_t>(op - static_cast<uint8_t *>(out_data));
+extern "C" {
+#include <lzf.h>
 }
 
 namespace pcd {
@@ -438,8 +280,9 @@ void PCDParser::parseBinaryCompressedData(std::istream &stream, PCDData &data) {
 
   // Decompress
   std::vector<uint8_t> decompressedData(uncompressedSize);
-  size_t actualSize = lzfDecompress(compressedData.data(), compressedSize,
-                                    decompressedData.data(), uncompressedSize);
+  unsigned int actualSize = lzf_decompress(
+      compressedData.data(), static_cast<unsigned int>(compressedSize),
+      decompressedData.data(), static_cast<unsigned int>(uncompressedSize));
 
   if (actualSize == 0 || actualSize != uncompressedSize) {
     throw std::runtime_error("LZF decompression failed");
@@ -637,8 +480,9 @@ void PCDParser::writeBinaryCompressed(std::ostream &stream,
 
   // Compress with LZF
   std::vector<uint8_t> compressed(totalSize + totalSize / 8 + 16);
-  size_t compressedSize = lzfCompress(uncompressed.data(), totalSize,
-                                      compressed.data(), compressed.size());
+  unsigned int compressedSize = lzf_compress(
+      uncompressed.data(), static_cast<unsigned int>(totalSize),
+      compressed.data(), static_cast<unsigned int>(compressed.size()));
 
   if (compressedSize == 0) {
     throw std::runtime_error("LZF compression failed");

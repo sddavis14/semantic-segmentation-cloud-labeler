@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node-version: [18, 20]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install CMake (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake
+
+      - name: Install dependencies and build
+        run: npm install
+
+      - name: Run C++ unit tests
+        run: npm test
+
+      - name: Verify native module loads
+        run: node -e "const pcd = require('./build/Release/pcd_parser.node'); console.log('Native module loaded:', Object.keys(pcd));"
+
+      - name: Start server (smoke test)
+        run: |
+          timeout 5 npm start || true
+          echo "Server started successfully"

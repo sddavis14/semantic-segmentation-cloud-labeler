@@ -22,6 +22,7 @@ A modern, web-based tool for labeling 3D LiDAR point clouds for semantic segment
 ### Prerequisites
 
 - **Node.js 18+**
+- **CMake 3.14+**
 - **C++ compiler** (Xcode CLI tools on macOS, build-essential on Linux)
 
 ### Installation
@@ -37,6 +38,15 @@ npm start
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Build Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run build` | Full build (CMake library + Node addon) |
+| `npm run build:cmake` | Build C++ library only |
+| `npm run build:node` | Rebuild Node addon (requires library) |
+| `npm test` | Run C++ unit tests |
 
 ### Open a Folder
 

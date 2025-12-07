@@ -1,4 +1,4 @@
-#include "pcd_parser.h"
+#include "pcd_parser/pcd_parser.h"
 #include <napi.h>
 
 // Parse a PCD file and return JavaScript object
