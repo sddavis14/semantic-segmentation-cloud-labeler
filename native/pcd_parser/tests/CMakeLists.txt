@@ -19,5 +19,18 @@ target_link_libraries(pcd_parser_tests
         GTest::gtest_main
 )
 
+# Set rpath for test executable to find shared libraries
+if(APPLE)
+    set_target_properties(pcd_parser_tests PROPERTIES
+        BUILD_RPATH "${CMAKE_BINARY_DIR}"
+        INSTALL_RPATH "@loader_path/../"
+    )
+else()
+    set_target_properties(pcd_parser_tests PROPERTIES
+        BUILD_RPATH "${CMAKE_BINARY_DIR}"
+        INSTALL_RPATH "$ORIGIN/../"
+    )
+endif()
+
 include(GoogleTest)
 gtest_discover_tests(pcd_parser_tests)
