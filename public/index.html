@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Point Cloud Labeler</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <div id="app">
+        <!-- Top Toolbar -->
+        <header class="toolbar">
+            <div class="toolbar-section">
+                <button id="btn-open" class="btn btn-primary" title="Open Folder (Ctrl+O)">
+                    <span class="icon">📂</span> Open
+                </button>
+                <button id="btn-save" class="btn" title="Save Labels (Ctrl+S)">
+                    <span class="icon">💾</span> Save
+                </button>
+                <div class="separator"></div>
+                <button id="btn-prev" class="btn" title="Previous File (←)">
+                    <span class="icon">◀</span>
+                </button>
+                <span id="file-progress" class="file-progress">No file loaded</span>
+                <button id="btn-next" class="btn" title="Next File (→)">
+                    <span class="icon">▶</span>
+                </button>
+            </div>
+            <div class="toolbar-section">
+                <div class="tool-group">
+                    <span class="label">Selection:</span>
+                    <button id="btn-box-select" class="btn tool-btn active" title="Box Select (B)">
+                        <span class="icon">▢</span> Box
+                    </button>
+                    <button id="btn-lasso-select" class="btn tool-btn" title="Lasso Select (L)">
+                        <span class="icon">〰</span> Lasso
+                    </button>
+                </div>
+                <div class="separator"></div>
+                <div class="tool-group">
+                    <span class="label">Color by:</span>
+                    <select id="colorize-mode">
+                        <option value="label">Label</option>
+                        <!-- Additional fields populated dynamically -->
+                    </select>
+                </div>
+                <div class="tool-group">
+                    <span class="label">Size:</span>
+                    <input type="range" id="point-size" min="0.1" max="1" value="0.5" step="0.1" title="Point Size">
+                    <span id="point-size-value">0.5</span>
+                </div>
+                <div class="separator"></div>
+                <button id="btn-reset-view" class="btn" title="Reset Camera (R)">
+                    <span class="icon">🎯</span>
+                </button>
+                <button id="btn-convert-format" class="btn" title="Convert PCD Format">
+                    <span class="icon">🔄</span> <span id="pcd-format-label">ASCII</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- File Tree Panel -->
+            <aside id="file-tree-panel" class="file-tree-panel">
+                <div class="panel-header">
+                    <h3>Files</h3>
+                </div>
+                <div id="file-tree" class="file-tree">
+                    <div class="file-tree-empty">Click "Open" to select a folder</div>
+                </div>
+            </aside>
+
+            <!-- 3D Viewport -->
+            <div id="viewport"></div>
+
+            <!-- Label Panel -->
+            <aside class="label-panel">
+                <h3>Labels</h3>
+                <div id="label-buttons"></div>
+                <div class="label-actions">
+                    <button id="btn-clear-selection" class="btn btn-small">Clear Selection (Esc)</button>
+                </div>
+                <div class="label-config-menu">
+                    <div class="config-menu-header">
+                        <span class="config-label">Config:</span>
+                        <span id="current-config-name" class="config-name">default</span>
+                    </div>
+                    <div class="config-menu-buttons">
+                        <button id="btn-load-config" class="btn btn-small" title="Load config from YAML file">📂
+                            Load</button>
+                        <button id="btn-edit-labels" class="btn btn-small" title="Edit current labels">✏️ Edit</button>
+                        <button id="btn-new-config" class="btn btn-small" title="Create new config">➕ New</button>
+                        <button id="btn-save-config-as" class="btn btn-small" title="Save config to file">💾 Save
+                            As</button>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Status Bar -->
+        <footer class="status-bar">
+            <span id="status-file">No file loaded</span>
+            <span id="status-points">0 points</span>
+            <span id="status-selection">0 selected</span>
+            <span id="status-mode">Box Select</span>
+        </footer>
+
+        <!-- Selection Overlay Canvas -->
+        <canvas id="selection-overlay"></canvas>
+
+        <!-- Label Config Modal -->
+        <div id="label-config-modal" class="modal hidden">
+            <div class="modal-content">
+                <h2>Configure Labels</h2>
+                <div id="label-config-list"></div>
+                <div class="modal-actions">
+                    <button id="btn-add-label" class="btn">+ Add Label</button>
+                    <button id="btn-save-config" class="btn btn-primary">Save</button>
+                    <button id="btn-cancel-config" class="btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Folder Select Modal -->
+        <div id="folder-modal" class="modal hidden">
+            <div class="modal-content folder-browser">
+                <div class="folder-browser-header">
+                    <h2>📁 Open Folder</h2>
+                    <button id="btn-folder-close" class="btn-close" title="Close">×</button>
+                </div>
+
+                <div class="folder-browser-body">
+                    <!-- Sidebar -->
+                    <div class="folder-sidebar">
+                        <div class="sidebar-section">
+                            <div class="sidebar-title">Favorites</div>
+                            <div id="folder-favorites" class="sidebar-items">
+                                <div class="sidebar-item" data-path="~">
+                                    <span class="sidebar-icon">🏠</span>
+                                    <span>Home</span>
+                                </div>
+                                <div class="sidebar-item" data-path="~/Desktop">
+                                    <span class="sidebar-icon">🖥️</span>
+                                    <span>Desktop</span>
+                                </div>
+                                <div class="sidebar-item" data-path="~/Documents">
+                                    <span class="sidebar-icon">📄</span>
+                                    <span>Documents</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="sidebar-section">
+                            <div class="sidebar-title">Recent</div>
+                            <div id="folder-recent" class="sidebar-items">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Content -->
+                    <div class="folder-main">
+                        <!-- Breadcrumb Navigation -->
+                        <div class="folder-breadcrumb" id="folder-breadcrumb">
+                            <!-- Populated by JavaScript -->
+                        </div>
+
+                        <!-- Filter -->
+                        <div class="folder-filter">
+                            <input type="text" id="folder-filter-input" placeholder="🔍 Filter folders..." />
+                        </div>
+
+                        <!-- Folder List -->
+                        <div id="folder-list" class="folder-list" tabindex="0">
+                            <!-- Populated by JavaScript -->
+                        </div>
+
+                        <!-- Info Bar -->
+                        <div id="folder-info" class="folder-info">
+                            Select a folder containing .pcd files
+                        </div>
+                    </div>
+                </div>
+
+                <div class="folder-browser-footer">
+                    <input type="text" id="folder-path-input" placeholder="Or enter path directly..." />
+                    <div class="modal-actions">
+                        <button id="btn-folder-cancel" class="btn">Cancel</button>
+                        <button id="btn-folder-open" class="btn btn-primary">Open</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js (only core and OrbitControls - PCD loading is via native parser) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <!-- App Scripts -->
+    <script src="js/colorizer.js?v=13"></script>
+    <script src="js/labels.js?v=13"></script>
+    <script src="js/selection.js?v=13"></script>
+    <script src="js/viewer.js?v=13"></script>
+    <script src="js/file-browser.js?v=13"></script>
+    <script src="js/app.js?v=13"></script>
+</body>
+
+</html>

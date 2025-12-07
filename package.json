@@ -1,0 +1,24 @@
+{
+    "name": "point-cloud-labeler",
+    "version": "1.0.0",
+    "description": "Interactive point cloud labeling tool for LiDAR data",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node server.js",
+        "build": "node-gyp rebuild",
+        "install": "node-gyp rebuild"
+    },
+    "dependencies": {
+        "cors": "^2.8.5",
+        "express": "^4.18.2",
+        "js-yaml": "^4.1.1"
+    },
+    "engines": {
+        "node": ">=16.0.0"
+    },
+    "devDependencies": {
+        "node-addon-api": "^8.5.0",
+        "node-gyp": "^12.1.0"
+    }
+}
