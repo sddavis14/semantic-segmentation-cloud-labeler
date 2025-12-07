@@ -103,6 +103,36 @@ Napi::Value UpdateLabels(const Napi::CallbackInfo &info) {
   }
 }
 
+// Update labels in an existing PCD file with format string
+Napi::Value UpdateLabelsWithFormat(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 3) {
+    Napi::TypeError::New(env, "Expected filepath, labels, and format")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  std::string filepath = info[0].As<Napi::String>().Utf8Value();
+  Napi::Uint32Array labelsArr = info[1].As<Napi::Uint32Array>();
+  std::string format = info[2].As<Napi::String>().Utf8Value();
+
+  try {
+    std::vector<uint32_t> labels(labelsArr.ElementLength());
+    for (size_t i = 0; i < labels.size(); i++) {
+      labels[i] = labelsArr[i];
+    }
+
+    pcd::PCDParser::updateLabelsWithFormat(filepath, labels, format);
+
+    return Napi::Boolean::New(env, true);
+
+  } catch (const std::exception &e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+}
+
 // Write a complete PCD file
 Napi::Value WritePCD(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
@@ -180,6 +210,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("parse", Napi::Function::New(env, ParsePCD));
   exports.Set("write", Napi::Function::New(env, WritePCD));
   exports.Set("updateLabels", Napi::Function::New(env, UpdateLabels));
+  exports.Set("updateLabelsWithFormat",
+              Napi::Function::New(env, UpdateLabelsWithFormat));
   exports.Set("convertFormat", Napi::Function::New(env, ConvertFormat));
   return exports;
 }

@@ -8,6 +8,7 @@ class App {
         this.selectionManager = null;
         this.fileBrowser = new FileBrowser();
         this.activeLabel = 0; // Currently active label ID for assignment
+        this.lastSelectionCount = 0; // Track last selection count for status display
 
         this.init();
     }
@@ -43,19 +44,23 @@ class App {
 
     async checkStartupConfig() {
         try {
+            console.log('Checking startup config...');
             const response = await fetch('/api/config/startup');
             const config = await response.json();
+            console.log('Startup config:', config);
 
             if (config.initialDirectory) {
                 // Auto-open the initial directory
+                console.log('Loading directory:', config.initialDirectory);
                 const count = await this.fileBrowser.loadDirectory(config.initialDirectory);
+                console.log('Loaded files:', count);
                 if (count > 0) {
                     await this.buildFileTree(config.initialDirectory);
                     this.fileBrowser.goToFirst();
                 }
             }
         } catch (err) {
-            console.log('No startup config');
+            console.error('Startup config error:', err);
         }
     }
 
@@ -137,6 +142,9 @@ class App {
         // Save
         document.getElementById('btn-save').addEventListener('click', () => this.saveLabels());
 
+        // Reset (discard changes and reload)
+        document.getElementById('btn-reset').addEventListener('click', () => this.resetCurrentFile());
+
         // Navigation
         document.getElementById('btn-prev').addEventListener('click', () => this.previousFile());
         document.getElementById('btn-next').addEventListener('click', () => this.nextFile());
@@ -151,12 +159,24 @@ class App {
             this.updateColors();
         });
 
-        // Point size slider
+        // Point size slider with logarithmic scaling
+        // Slider: 0-1 linear -> Point size: 0.001-1.0 logarithmic
+        const sliderToPointSize = (sliderVal) => {
+            // Map 0-1 to 0.001-1.0 logarithmically
+            const minSize = 0.001;
+            const maxSize = 1.0;
+            return minSize * Math.pow(maxSize / minSize, sliderVal);
+        };
+
         document.getElementById('point-size').addEventListener('input', (e) => {
-            const size = parseFloat(e.target.value);
-            document.getElementById('point-size-value').textContent = size;
+            const sliderVal = parseFloat(e.target.value);
+            const size = sliderToPointSize(sliderVal);
+            document.getElementById('point-size-value').textContent = size.toFixed(3);
             this.viewer.setPointSize(size);
         });
+
+        // Store conversion function for use elsewhere
+        this.sliderToPointSize = sliderToPointSize;
 
         // Reset view
         document.getElementById('btn-reset-view').addEventListener('click', () => this.viewer.resetView());
@@ -174,9 +194,6 @@ class App {
         document.getElementById('btn-load-config').addEventListener('click', () => this.loadConfigFromFile());
         document.getElementById('btn-new-config').addEventListener('click', () => this.createNewConfig());
         document.getElementById('btn-save-config-as').addEventListener('click', () => this.saveConfigAsFile());
-
-        // Convert PCD format
-        document.getElementById('btn-convert-format').addEventListener('click', () => this.convertPCDFormat());
     }
 
     setupKeyboardShortcuts() {
@@ -214,8 +231,13 @@ class App {
                 return;
             }
 
-            // Clear selection
+            // Clear selection / close shortcuts
             if (key === 'escape') {
+                const shortcutsOverlay = document.getElementById('shortcuts-overlay');
+                if (!shortcutsOverlay.classList.contains('hidden')) {
+                    shortcutsOverlay.classList.add('hidden');
+                    return;
+                }
                 this.clearSelection();
                 return;
             }
@@ -239,6 +261,12 @@ class App {
             // Cycle colorization
             if (key === 'c') {
                 this.cycleColorMode();
+                return;
+            }
+
+            // Show keyboard shortcuts (? or h for help)
+            if (e.key === '?' || key === 'h') {
+                this.toggleShortcutsOverlay();
                 return;
             }
 
@@ -288,6 +316,12 @@ class App {
             canvas.releasePointerCapture(e.pointerId);
             isDragging = false;
             this.selectionManager.endSelection(e.clientX, e.clientY);
+
+            // Auto-apply active label if there's a selection and an active label
+            const selectedIndices = this.selectionManager.getSelectedIndices();
+            if (selectedIndices.size > 0 && this.activeLabel !== null && this.activeLabel !== undefined) {
+                this.assignLabelToSelection(this.activeLabel);
+            }
         });
 
         // Prevent context menu on viewport
@@ -597,14 +631,12 @@ class App {
                 <span class="tree-file-dirty" title="Unsaved changes">●</span>
             `;
             fileNode.addEventListener('click', async () => {
-                if (file.handle) {
-                    // File System Access API - load from handle
+                // Load file via server API
+                const targetFile = this.fileBrowser.files[index];
+                const success = await this.loadFile(targetFile);
+                if (success !== false) {
+                    // Only update index and selection if load succeeded
                     this.fileBrowser.currentIndex = index;
-                    await this.loadFileFromHandle(file);
-                    this.updateFileTreeSelection();
-                } else {
-                    // Server-based file loading
-                    this.fileBrowser.goToIndex(index);
                     this.updateFileTreeSelection();
                 }
             });
@@ -623,13 +655,16 @@ class App {
     }
 
     async loadFile(file) {
-        if (!file) return;
+        if (!file) return false;
 
         // Check for unsaved changes
         if (this.labelManager.isDirty()) {
-            if (!confirm('You have unsaved changes. Continue without saving?')) {
-                return;
+            if (!confirm('You have unsaved label changes that will be DISCARDED.\n\nContinue without saving?')) {
+                return false; // User cancelled
             }
+            // User chose to discard - clear the dirty indicator
+            this.clearDirtyIndicator();
+            this.labelManager.markClean();
         }
 
         try {
@@ -657,6 +692,11 @@ class App {
 
             // Update colors
             this.updateColors();
+
+            // Apply current point size from slider
+            const sliderVal = parseFloat(document.getElementById('point-size').value);
+            const currentPointSize = this.sliderToPointSize(sliderVal);
+            this.viewer.setPointSize(currentPointSize);
 
             // Update UI
             this.updateStatusBar();
@@ -695,13 +735,17 @@ class App {
         }
 
         try {
+            // Get selected format from dropdown
+            const format = document.getElementById('save-format').value;
+
             // Use native parser API to update labels in PCD file  
             const response = await fetch('/api/pcd/update-labels', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     pcdPath: filePath,
-                    labels: Array.from(this.labelManager.pointLabels)
+                    labels: Array.from(this.labelManager.pointLabels),
+                    format: format  // '' = auto (preserve original), or 'ascii'/'binary'/'binary_compressed'
                 })
             });
 
@@ -710,13 +754,68 @@ class App {
                 this.labelManager.markClean();
                 this.clearDirtyIndicator();
                 this.updateStatusBar();
-                this.showNotification('Labels saved successfully!', 'success');
+                const fileName = filePath.split('/').pop();
+                this.showNotification(`Labels saved to ${fileName}`, 'success');
             } else {
                 alert('Failed to save labels: ' + (result.error || 'Unknown error'));
             }
         } catch (err) {
             console.error('Failed to save labels:', err);
             alert('Failed to save labels: ' + err.message);
+        }
+    }
+
+    async resetCurrentFile() {
+        const currentFile = this.fileBrowser.getCurrentFile();
+        if (!currentFile) {
+            alert('No file loaded');
+            return;
+        }
+
+        // Confirm reset
+        if (this.labelManager.isDirty()) {
+            if (!confirm('Discard all unsaved changes and reload from file?')) {
+                return;
+            }
+        }
+
+        // Clear dirty state first
+        this.clearDirtyIndicator();
+        this.labelManager.markClean();
+        this.selectionManager.clearSelection();
+
+        // Reload the file
+        try {
+            const response = await fetch(`/api/pcd/parse?path=${encodeURIComponent(currentFile.path)}`);
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            // Load data into viewer
+            const result = this.viewer.loadFromData(data);
+
+            // Initialize labels
+            this.labelManager.initForPointCloud(result.pointCount);
+
+            // Apply embedded labels from PCD if present
+            if (data.labels && data.labels.length > 0) {
+                this.labelManager.setPointLabels(data.labels);
+            }
+
+            this.updateColors();
+
+            // Apply current point size from slider
+            const sliderVal = parseFloat(document.getElementById('point-size').value);
+            const currentPointSize = this.sliderToPointSize(sliderVal);
+            this.viewer.setPointSize(currentPointSize);
+
+            this.updateStatusBar();
+            this.showNotification('File reloaded - changes discarded', 'info');
+        } catch (err) {
+            console.error('Failed to reload file:', err);
+            alert('Failed to reload file: ' + err.message);
         }
     }
 
@@ -769,8 +868,12 @@ class App {
 
     async updatePCDFormatLabel() {
         const currentFile = this.fileBrowser.getCurrentFile();
+        const formatBadge = document.getElementById('pcd-format-badge');
+
+        if (!formatBadge) return;
+
         if (!currentFile || !currentFile.path) {
-            document.getElementById('pcd-format-label').textContent = '---';
+            formatBadge.classList.add('hidden');
             return;
         }
 
@@ -778,12 +881,17 @@ class App {
             const response = await fetch(`/api/pcd/format?path=${encodeURIComponent(currentFile.path)}`);
             const data = await response.json();
             if (data.format) {
-                document.getElementById('pcd-format-label').textContent = data.format.toUpperCase();
+                formatBadge.textContent = data.format.toUpperCase();
+                formatBadge.classList.remove('hidden');
+            } else {
+                formatBadge.classList.add('hidden');
             }
         } catch (err) {
             console.error('Failed to get PCD format:', err);
+            formatBadge.classList.add('hidden');
         }
     }
+
 
     async convertPCDFormat() {
         const currentFile = this.fileBrowser.getCurrentFile();
@@ -853,12 +961,12 @@ class App {
         this.updateDirtyIndicator();
     }
 
-    updateDirtyIndicator() {
+    updateDirtyIndicator(forceShow = false) {
         const currentFile = this.fileBrowser.getCurrentFile();
         if (!currentFile) return;
 
         const currentPath = currentFile.path || currentFile.name;
-        const isDirty = this.labelManager.isDirty();
+        const isDirty = forceShow || this.labelManager.isDirty();
 
         // Find the file node in the tree
         const fileNodes = document.querySelectorAll('.tree-file');
@@ -883,8 +991,22 @@ class App {
     }
 
     onSelectionChanged() {
+        // Track the last selection count for display (before it gets cleared)
+        const currentCount = this.selectionManager.getSelectedCount();
+        if (currentCount > 0) {
+            this.lastSelectionCount = currentCount;
+        }
+
         this.updateColors();
         this.updateStatusBar();
+
+        // Show dirty indicator if there are active selections (pending changes)
+        const hasSelection = this.selectionManager.getSelectedIndices().size > 0;
+        if (hasSelection) {
+            this.updateDirtyIndicator(true); // Force show indicator
+        } else if (!this.labelManager.isDirty()) {
+            this.clearDirtyIndicator();
+        }
     }
 
     updateColors() {
@@ -913,14 +1035,14 @@ class App {
             rgbOption.textContent = 'RGB Color';
             select.appendChild(rgbOption);
         }
-
         // Add field options
         if (fieldNames && fieldNames.length > 0) {
             for (const name of fieldNames) {
                 const lower = name.toLowerCase();
                 // Skip x, y, z as they're not useful for colorization
                 // Skip r, g, b if RGB mode is available (grouped into RGB option)
-                if (['x', 'y', 'z'].includes(lower)) continue;
+                // Skip label since it's already added as first option
+                if (['x', 'y', 'z', 'label'].includes(lower)) continue;
                 if (hasRGB && ['r', 'g', 'b'].includes(lower)) continue;
 
                 const option = document.createElement('option');
@@ -950,16 +1072,21 @@ class App {
     updateStatusBar() {
         const fileName = this.fileBrowser.getCurrentFileName() || 'No file loaded';
         const pointCount = this.viewer.getPointCount();
-        const selectedCount = this.selectionManager.getSelectedCount();
         const dirty = this.labelManager.isDirty() ? ' *' : '';
 
         document.getElementById('status-file').textContent = fileName + dirty;
         document.getElementById('status-points').textContent = `${pointCount.toLocaleString()} points`;
-        document.getElementById('status-selection').textContent = `${selectedCount.toLocaleString()} selected`;
+        document.getElementById('status-selection').textContent = `${this.lastSelectionCount.toLocaleString()} selected`;
     }
 
     updateFileProgress() {
         document.getElementById('file-progress').textContent = this.fileBrowser.getProgressString();
+    }
+
+    // Keyboard Shortcuts Overlay
+    toggleShortcutsOverlay() {
+        const overlay = document.getElementById('shortcuts-overlay');
+        overlay.classList.toggle('hidden');
     }
 
     // Label Configuration Modal

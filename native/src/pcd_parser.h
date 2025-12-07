@@ -228,14 +228,21 @@ public:
   // Write PCD data to file
   static void write(const std::string &filepath, const PCDData &data,
                     bool binary = false);
+  static void write(const std::string &filepath, const PCDData &data,
+                    const std::string &format);
 
   // Update only labels in an existing file (preserves all other fields)
   static void updateLabels(const std::string &filepath,
                            const std::vector<uint32_t> &labels,
                            bool binary = false);
+  static void updateLabelsWithFormat(const std::string &filepath,
+                                     const std::vector<uint32_t> &labels,
+                                     const std::string &format);
 
-  // Convert file format (ascii <-> binary)
+  // Convert file format (ascii <-> binary <-> binary_compressed)
   static void convertFormat(const std::string &filepath, bool toBinary);
+  static void convertFormat(const std::string &filepath,
+                            const std::string &format);
 
 private:
   static PCDHeader parseHeader(std::istream &stream);
@@ -243,8 +250,10 @@ private:
                                               char delim = ' ');
   static void parseAsciiData(std::istream &stream, PCDData &data);
   static void parseBinaryData(std::istream &stream, PCDData &data);
+  static void parseBinaryCompressedData(std::istream &stream, PCDData &data);
   static void writeAscii(std::ostream &stream, const PCDData &data);
   static void writeBinary(std::ostream &stream, const PCDData &data);
+  static void writeBinaryCompressed(std::ostream &stream, const PCDData &data);
 };
 
 } // namespace pcd

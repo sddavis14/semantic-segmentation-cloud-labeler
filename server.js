@@ -89,7 +89,7 @@ app.get('/api/pcd/parse', (req, res) => {
 
 // API: Update labels in PCD file using native parser
 app.post('/api/pcd/update-labels', (req, res) => {
-    const { pcdPath, labels } = req.body;
+    const { pcdPath, labels, format } = req.body;
 
     if (!pcdPath || !labels) {
         return res.status(400).json({ error: 'pcdPath and labels required' });
@@ -107,8 +107,13 @@ app.post('/api/pcd/update-labels', (req, res) => {
 
     try {
         const labelsArray = new Uint32Array(labels);
-        pcdParser.updateLabels(resolvedPath, labelsArray);
-        res.json({ success: true });
+        // Use format-aware save if format specified, otherwise auto-detect
+        if (format && format !== '') {
+            pcdParser.updateLabelsWithFormat(resolvedPath, labelsArray, format);
+        } else {
+            pcdParser.updateLabels(resolvedPath, labelsArray);
+        }
+        res.json({ success: true, format: format || 'auto' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -145,7 +150,7 @@ app.post('/api/pcd/convert-format', (req, res) => {
     }
 });
 
-// API: Get current PCD format
+// API: Get current PCD format (uses native parser header info)
 app.get('/api/pcd/format', (req, res) => {
     const filePath = req.query.path;
 
@@ -159,19 +164,14 @@ app.get('/api/pcd/format', (req, res) => {
         return res.status(404).json({ error: 'File not found' });
     }
 
+    if (!pcdParser) {
+        return res.status(500).json({ error: 'Native parser not available' });
+    }
+
     try {
-        const content = fs.readFileSync(resolvedPath, 'utf8');
-        const lines = content.split('\n');
-
-        for (const line of lines) {
-            const trimmed = line.trim().toLowerCase();
-            if (trimmed.startsWith('data ')) {
-                const format = trimmed.replace('data ', '').trim();
-                return res.json({ format: format });
-            }
-        }
-
-        res.status(400).json({ error: 'No DATA section found' });
+        const data = pcdParser.parse(resolvedPath);
+        const format = data.header.dataType || 'unknown';
+        res.json({ format: format.toLowerCase() });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -320,115 +320,6 @@ app.post('/api/labels', (req, res) => {
     try {
         fs.writeFileSync(labelsPath, JSON.stringify(labels, null, 2));
         res.json({ success: true, path: labelsPath });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// API: Save PCD file with labels embedded as a field
-app.post('/api/pcd/save-with-labels', (req, res) => {
-    const { pcdPath, labels } = req.body;
-
-    if (!pcdPath || !labels) {
-        return res.status(400).json({ error: 'PCD path and labels required' });
-    }
-
-    const resolvedPath = path.resolve(pcdPath);
-
-    if (!fs.existsSync(resolvedPath)) {
-        return res.status(404).json({ error: 'PCD file not found' });
-    }
-
-    try {
-        // Read existing PCD file
-        const content = fs.readFileSync(resolvedPath, 'utf8');
-        const lines = content.split('\n');
-
-        // Parse header
-        let headerEndIdx = -1;
-        let dataFormat = 'ascii';
-        let fieldsLine = '';
-        let sizeLine = '';
-        let typeLine = '';
-        let countLine = '';
-        let pointCount = 0;
-        let hasLabelField = false;
-        let labelFieldIdx = -1;
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line.startsWith('FIELDS')) {
-                fieldsLine = line;
-                const fields = line.split(/\s+/).slice(1);
-                labelFieldIdx = fields.indexOf('label');
-                hasLabelField = labelFieldIdx !== -1;
-            } else if (line.startsWith('SIZE')) {
-                sizeLine = line;
-            } else if (line.startsWith('TYPE')) {
-                typeLine = line;
-            } else if (line.startsWith('COUNT')) {
-                countLine = line;
-            } else if (line.startsWith('POINTS')) {
-                pointCount = parseInt(line.split(/\s+/)[1]);
-            } else if (line.startsWith('DATA')) {
-                dataFormat = line.split(/\s+/)[1];
-                headerEndIdx = i;
-                break;
-            }
-        }
-
-        if (headerEndIdx === -1 || dataFormat !== 'ascii') {
-            return res.status(400).json({ error: 'Only ASCII PCD files are supported for label embedding' });
-        }
-
-        // Build new PCD content
-        const headerLines = lines.slice(0, headerEndIdx + 1);
-        const dataLines = lines.slice(headerEndIdx + 1).filter(l => l.trim());
-
-        // Update header to include label field if not present
-        if (!hasLabelField) {
-            for (let i = 0; i < headerLines.length; i++) {
-                if (headerLines[i].startsWith('FIELDS')) {
-                    headerLines[i] += ' label';
-                } else if (headerLines[i].startsWith('SIZE')) {
-                    headerLines[i] += ' 1';
-                } else if (headerLines[i].startsWith('TYPE')) {
-                    headerLines[i] += ' U';
-                } else if (headerLines[i].startsWith('COUNT')) {
-                    headerLines[i] += ' 1';
-                }
-            }
-        }
-
-        // Update data lines with labels
-        const newDataLines = dataLines.map((line, idx) => {
-            const parts = line.trim().split(/\s+/);
-            if (parts.length === 0) return line;
-
-            const label = labels[idx] !== undefined ? labels[idx] : 0;
-
-            if (hasLabelField && labelFieldIdx !== -1) {
-                // Replace existing label
-                parts[labelFieldIdx + (parts.length - dataLines.length > 0 ? 0 : 0)] = label.toString();
-                // Actually need to find correct position
-                const fieldCount = fieldsLine.split(/\s+/).length - 1;
-                if (parts.length > labelFieldIdx) {
-                    parts[labelFieldIdx] = label.toString();
-                } else {
-                    parts.push(label.toString());
-                }
-            } else {
-                // Append label
-                parts.push(label.toString());
-            }
-
-            return parts.join(' ');
-        });
-
-        const newContent = headerLines.join('\n') + '\n' + newDataLines.join('\n') + '\n';
-        fs.writeFileSync(resolvedPath, newContent);
-
-        res.json({ success: true, path: resolvedPath });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -1,0 +1,37 @@
+labels:
+  - id: 0
+    name: unlabeled
+    color: "#808080"
+    shortcut: "0"
+  - id: 1
+    name: ground
+    color: "#8b4513"
+    shortcut: "1"
+  - id: 2
+    name: vegetation
+    color: "#228b22"
+    shortcut: "2"
+  - id: 3
+    name: building
+    color: "#4169e1"
+    shortcut: "3"
+  - id: 4
+    name: vehicle
+    color: "#dc143c"
+    shortcut: "4"
+  - id: 5
+    name: pedestrian
+    color: "#ffd700"
+    shortcut: "5"
+  - id: 6
+    name: pole
+    color: "#ff69b4"
+    shortcut: "6"
+  - id: 7
+    name: road
+    color: "#2f4f4f"
+    shortcut: "7"
+  - id: 8
+    name: other
+    color: "#9932cc"
+    shortcut: "8"

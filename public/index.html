@@ -5,7 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Point Cloud Labeler</title>
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css?v=25">
 </head>
 
 <body>
@@ -19,13 +22,17 @@
                 <button id="btn-save" class="btn" title="Save Labels (Ctrl+S)">
                     <span class="icon">💾</span> Save
                 </button>
-                <div class="separator"></div>
-                <button id="btn-prev" class="btn" title="Previous File (←)">
-                    <span class="icon">◀</span>
-                </button>
-                <span id="file-progress" class="file-progress">No file loaded</span>
-                <button id="btn-next" class="btn" title="Next File (→)">
-                    <span class="icon">▶</span>
+                <div class="tool-group">
+                    <span class="label">Format:</span>
+                    <select id="save-format" title="Output format for saved files">
+                        <option value="">Auto (preserve)</option>
+                        <option value="ascii">ASCII</option>
+                        <option value="binary">Binary</option>
+                        <option value="binary_compressed">Compressed</option>
+                    </select>
+                </div>
+                <button id="btn-reset" class="btn" title="Discard changes and reload file">
+                    <span class="icon">↩️</span> Reset
                 </button>
             </div>
             <div class="toolbar-section">
@@ -48,16 +55,22 @@
                 </div>
                 <div class="tool-group">
                     <span class="label">Size:</span>
-                    <input type="range" id="point-size" min="0.1" max="1" value="0.5" step="0.1" title="Point Size">
-                    <span id="point-size-value">0.5</span>
+                    <input type="range" id="point-size" min="0" max="1" value="0.5" step="0.01" title="Point Size">
+                    <span id="point-size-value">0.05</span>
                 </div>
-                <div class="separator"></div>
                 <button id="btn-reset-view" class="btn" title="Reset Camera (R)">
                     <span class="icon">🎯</span>
                 </button>
-                <button id="btn-convert-format" class="btn" title="Convert PCD Format">
-                    <span class="icon">🔄</span> <span id="pcd-format-label">ASCII</span>
-                </button>
+                <div class="separator"></div>
+                <div class="tool-group nav-group">
+                    <button id="btn-prev" class="btn" title="Previous File (←)">
+                        <span class="icon">◀</span>
+                    </button>
+                    <span id="file-progress" class="file-progress">0 / 0</span>
+                    <button id="btn-next" class="btn" title="Next File (→)">
+                        <span class="icon">▶</span>
+                    </button>
+                </div>
             </div>
         </header>
 
@@ -74,7 +87,12 @@
             </aside>
 
             <!-- 3D Viewport -->
-            <div id="viewport"></div>
+            <div id="viewport">
+                <!-- Help hint overlay -->
+                <div class="help-hint">Press <kbd>H</kbd> for help</div>
+                <!-- PCD format badge -->
+                <div id="pcd-format-badge" class="pcd-format-badge hidden">ASCII</div>
+            </div>
 
             <!-- Label Panel -->
             <aside class="label-panel">
@@ -102,10 +120,15 @@
 
         <!-- Status Bar -->
         <footer class="status-bar">
-            <span id="status-file">No file loaded</span>
-            <span id="status-points">0 points</span>
-            <span id="status-selection">0 selected</span>
-            <span id="status-mode">Box Select</span>
+            <div class="status-left">
+                <span id="status-file">No file loaded</span>
+                <span id="status-points">0 points</span>
+                <span id="status-selection">0 selected</span>
+                <span id="status-mode">Box Select</span>
+            </div>
+            <div class="status-center">
+                <span id="status-filename">No file loaded</span>
+            </div>
         </footer>
 
         <!-- Selection Overlay Canvas -->
@@ -195,17 +218,58 @@
         </div>
     </div>
 
-    <!-- Three.js (only core and OrbitControls - PCD loading is via native parser) -->
+    <!-- Keyboard Shortcuts Overlay -->
+    <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
+        <div class="shortcuts-content">
+            <div class="shortcuts-header">
+                <h2>⌨️ Keyboard Shortcuts</h2>
+                <button class="btn-close"
+                    onclick="document.getElementById('shortcuts-overlay').classList.add('hidden')">&times;</button>
+            </div>
+            <div class="shortcuts-grid">
+                <div class="shortcuts-section">
+                    <h3>Navigation</h3>
+                    <div class="shortcut-item"><kbd>N</kbd> / <kbd>Right Arrow</kbd> Next file</div>
+                    <div class="shortcut-item"><kbd>P</kbd> / <kbd>Left Arrow</kbd> Previous file</div>
+                    <div class="shortcut-item"><kbd>R</kbd> Reset view</div>
+                </div>
+                <div class="shortcuts-section">
+                    <h3>Selection</h3>
+                    <div class="shortcut-item"><kbd>B</kbd> Box select mode</div>
+                    <div class="shortcut-item"><kbd>L</kbd> Lasso select mode</div>
+                    <div class="shortcut-item"><kbd>Esc</kbd> Clear selection</div>
+                </div>
+                <div class="shortcuts-section">
+                    <h3>Labels</h3>
+                    <div class="shortcut-item"><kbd>1</kbd>-<kbd>9</kbd> Select current label</div>
+                    <div class="shortcut-item"><kbd>0</kbd> Unlabeled</div>
+                    <div class="shortcut-item"><kbd>C</kbd> Cycle color mode</div>
+                </div>
+                <div class="shortcuts-section">
+                    <h3>File</h3>
+                    <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>S</kbd> Save</div>
+                    <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>O</kbd> Open folder</div>
+                    <div class="shortcut-item"><kbd>?</kbd> Show shortcuts</div>
+                </div>
+            </div>
+            <div class="shortcuts-footer">
+                Press <kbd>?</kbd> or <kbd>Esc</kbd> to close
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js (only core - PCD loading is via native parser) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Modified TrackballControls: right-click=rotate, middle=zoom, left-click=FREE -->
+    <script src="js/TrackballControls.js?v=2"></script>
 
     <!-- App Scripts -->
-    <script src="js/colorizer.js?v=13"></script>
-    <script src="js/labels.js?v=13"></script>
-    <script src="js/selection.js?v=13"></script>
-    <script src="js/viewer.js?v=13"></script>
-    <script src="js/file-browser.js?v=13"></script>
-    <script src="js/app.js?v=13"></script>
+    <script src="js/colorizer.js?v=21"></script>
+    <script src="js/labels.js?v=20"></script>
+    <script src="js/selection.js?v=20"></script>
+    <script src="js/viewer.js?v=29"></script>
+    <script src="js/file-browser.js?v=20"></script>
+    <script src="js/app.js?v=35"></script>
 </body>
 
 </html>

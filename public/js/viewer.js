@@ -34,21 +34,19 @@ class PointCloudViewer {
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.container.appendChild(this.renderer.domElement);
 
-        // Controls - use right mouse for orbit, middle for pan
-        this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-        this.controls.enableDamping = true;
-        this.controls.dampingFactor = 0.1;
-        this.controls.screenSpacePanning = true;
-        this.controls.mouseButtons = {
-            LEFT: null,
-            MIDDLE: THREE.MOUSE.PAN,
-            RIGHT: THREE.MOUSE.ROTATE
-        };
+        // TrackballControls - allows free rotation in any direction
+        // Default: Left = rotate, Middle = zoom, Right = pan
+        this.controls = new THREE.TrackballControls(this.camera, this.renderer.domElement);
+        this.controls.rotateSpeed = 2.0;
+        this.controls.zoomSpeed = 1.2;
+        this.controls.panSpeed = 0.8;
+        this.controls.staticMoving = false;
+        this.controls.dynamicDampingFactor = 0.15;
 
         // Grid helper
-        const gridHelper = new THREE.GridHelper(100, 100, 0x333333, 0x222222);
-        gridHelper.rotation.x = Math.PI / 2;
-        this.scene.add(gridHelper);
+        this.gridHelper = new THREE.GridHelper(100, 100, 0x333333, 0x222222);
+        this.gridHelper.rotation.x = Math.PI / 2;
+        this.scene.add(this.gridHelper);
 
         // Axes helper
         const axesHelper = new THREE.AxesHelper(5);
@@ -185,6 +183,43 @@ class PointCloudViewer {
 
     enableControls(enabled) {
         this.controls.enabled = enabled;
+    }
+
+    /**
+     * Set whether to invert the camera view direction
+     * @param {boolean} inverted - true to view from opposite side
+     */
+    setInvertView(inverted) {
+        if (!this.points) return;
+
+        // Calculate bounding box to position camera appropriately
+        const geometry = this.points.geometry;
+        geometry.computeBoundingBox();
+        const bbox = geometry.boundingBox;
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const distance = maxDim * 2;
+
+        // Reset controls target to center
+        this.controls.target.copy(center);
+
+        // Y-up for consistent orbit behavior
+        this.camera.up.set(0, 1, 0);
+
+        // Isometric view - from opposite corner when inverted
+        const sign = inverted ? -1 : 1;
+        this.camera.position.set(
+            center.x + sign * distance * 0.7,
+            center.y + distance * 0.7,
+            center.z + sign * distance * 0.7
+        );
+
+        this.camera.lookAt(center);
+        this.controls.update();
     }
 }
 

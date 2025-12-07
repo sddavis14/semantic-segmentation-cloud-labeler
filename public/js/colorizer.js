@@ -27,7 +27,12 @@ class Colorizer {
 
         // Detect RGB fields (case-insensitive)
         const fieldNames = Object.keys(this.fieldData).map(n => n.toLowerCase());
+
+        // Check for separate R, G, B fields
         this.hasRGB = fieldNames.includes('r') && fieldNames.includes('g') && fieldNames.includes('b');
+
+        // Check for packed RGB field (PCL format - single field named 'rgb')
+        this.hasPackedRGB = fieldNames.includes('rgb');
 
         // Compute bounds for all numeric fields
         this.fieldBounds = {};
@@ -47,7 +52,7 @@ class Colorizer {
 
     // Check if RGB colorization is available
     hasRGBFields() {
-        return this.hasRGB;
+        return this.hasRGB || this.hasPackedRGB;
     }
 
     // Get available field names for colorization
@@ -86,10 +91,15 @@ class Colorizer {
 
         // Get RGB data if in RGB mode
         let rData = null, gData = null, bData = null;
-        if (this.mode === 'rgb' && this.hasRGB) {
-            rData = this.getField('r');
-            gData = this.getField('g');
-            bData = this.getField('b');
+        let packedRgbData = null;
+        if (this.mode === 'rgb') {
+            if (this.hasRGB) {
+                rData = this.getField('r');
+                gData = this.getField('g');
+                bData = this.getField('b');
+            } else if (this.hasPackedRGB) {
+                packedRgbData = this.getField('rgb');
+            }
         }
 
         for (let i = 0; i < pointCount; i++) {
@@ -108,7 +118,7 @@ class Colorizer {
                 g = color.g;
                 b = color.b;
             } else if (this.mode === 'rgb' && rData && gData && bData) {
-                // Use actual RGB values from point cloud
+                // Use actual RGB values from point cloud (separate channels)
                 // Normalize from 0-255 to 0-1
                 const rVal = rData[i];
                 const gVal = gData[i];
@@ -127,6 +137,21 @@ class Colorizer {
                     g = gVal;
                     b = bVal;
                 }
+            } else if (this.mode === 'rgb' && packedRgbData) {
+                // PCL packed RGB format: float bits represent uint32 with 0x00RRGGBB
+                const packedFloat = packedRgbData[i];
+
+                // Reinterpret float bits as integer
+                const buffer = new ArrayBuffer(4);
+                const floatView = new Float32Array(buffer);
+                const intView = new Uint32Array(buffer);
+                floatView[0] = packedFloat;
+                const rgb = intView[0];
+
+                // Extract R, G, B bytes
+                r = ((rgb >> 16) & 0xFF) / 255;
+                g = ((rgb >> 8) & 0xFF) / 255;
+                b = (rgb & 0xFF) / 255;
             } else {
                 // Color by field value (gradient)
                 const fieldData = this.fieldData[this.mode];

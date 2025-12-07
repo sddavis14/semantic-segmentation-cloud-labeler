@@ -50,7 +50,6 @@ class LabelManager {
     initForPointCloud(numPoints) {
         this.pointCount = numPoints;
         this.pointLabels = new Uint8Array(numPoints);
-        this.undoStack = [];
         this.dirty = false;
     }
 
@@ -91,70 +90,12 @@ class LabelManager {
         }
     }
 
-    async loadLabelsForFile(pcdPath) {
-        try {
-            const response = await fetch(`/api/labels?path=${encodeURIComponent(pcdPath)}`);
-            const result = await response.json();
-
-            if (result.exists && result.data) {
-                if (result.data.pointLabels) {
-                    this.setPointLabels(result.data.pointLabels);
-                }
-                // Optionally update label definitions from file
-                if (result.data.labelDefinitions) {
-                    // Merge with current config (file labels take precedence for colors)
-                }
-                return true;
-            }
-        } catch (err) {
-            console.error('Failed to load labels:', err);
-        }
-        return false;
-    }
-
-    async saveLabelsForFile(pcdPath) {
-        const data = {
-            version: 1,
-            pointLabels: Array.from(this.pointLabels),
-            labelDefinitions: this.labels
-        };
-
-        try {
-            const response = await fetch('/api/labels', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pcdPath, labels: data })
-            });
-            const result = await response.json();
-            if (result.success) {
-                this.dirty = false;
-                return true;
-            }
-        } catch (err) {
-            console.error('Failed to save labels:', err);
-        }
-        return false;
-    }
-
     isDirty() {
         return this.dirty;
     }
 
     markClean() {
         this.dirty = false;
-    }
-
-    getLabelStats() {
-        const stats = new Map();
-        this.labels.forEach(l => stats.set(l.id, 0));
-
-        if (this.pointLabels) {
-            for (let i = 0; i < this.pointLabels.length; i++) {
-                const id = this.pointLabels[i];
-                stats.set(id, (stats.get(id) || 0) + 1);
-            }
-        }
-        return stats;
     }
 }
 

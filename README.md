@@ -1,97 +1,55 @@
-# Point Cloud Labeling Tool
+# Point Cloud Labeler
 
-Interactive web-based tool for labeling LiDAR point clouds for semantic segmentation.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Prerequisites
+A modern, web-based tool for labeling 3D LiDAR point clouds for semantic segmentation. Built with Three.js and a high-performance native C++ PCD parser.
 
-This tool requires **Node.js 18+** and a **C++ compiler** for the native PCD parser addon.
+![Point Cloud Labeler Interface](sample_data/screenshot.png)
 
-### macOS
+## ✨ Features
 
-```bash
-# Install Xcode command line tools (for C++ compiler)
-xcode-select --install
+- **High-Performance Parsing**: Native C++ addon for fast PCD file loading
+- **Multiple Save Formats**: ASCII, Binary, and LZF-compressed Binary
+- **Dynamic Colorization**: Color by label, RGB, intensity, or any field
+- **View Plane Switching**: Quickly snap to XY, XZ, or YZ orthogonal views  
+- **Selection Tools**: Box and lasso selection for precise labeling
+- **Configurable Labels**: Add custom labels with unique colors
+- **Keyboard Shortcuts**: Full keyboard navigation (press `H` for cheat sheet)
+- **Modern UI**: Dark theme with glassmorphism design
 
-# Or via nvm (Node Version Manager)
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-\. "$HOME/.nvm/nvm.sh"
-nvm install 24
-```
+## 🚀 Quick Start
 
-### Ubuntu/Debian Linux
+### Prerequisites
 
-```bash
-# Install build essentials (for C++ compiler)
-sudo apt-get install -y build-essential python3
+- **Node.js 18+**
+- **C++ compiler** (Xcode CLI tools on macOS, build-essential on Linux)
 
-# Or via nvm
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-\. "$HOME/.nvm/nvm.sh"
-nvm install 24
-```
-
-## Installation
+### Installation
 
 ```bash
-# Clone the repository
+# Clone and install
 git clone <repository-url>
 cd labeling_tool
-
-# Install dependencies (includes building native C++ addon)
 npm install
 
-# The native addon will be automatically built during npm install
-# If it fails, you can manually rebuild:
-npm run build
-```
-
-## Quick Start
-
-```bash
 # Start the server
 npm start
 ```
 
-Then open `http://localhost:3000` in your browser.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Troubleshooting
-
-### Native Addon Build Errors
-
-If you see errors like "'napi.h' file not found" during `npm install`:
+### Open a Folder
 
 ```bash
-# Ensure node-gyp is installed globally
-npm install -g node-gyp
-
-# Clean and rebuild
-rm -rf build node_modules
-npm install
+# Start with a specific folder
+npm start -- --dir /path/to/pcd/files
 ```
 
-### Server Shows "Native parser not available"
-
-The C++ native addon failed to build. Check the build output and ensure:
-- C++ compiler is installed (`g++` or `clang++`)
-- Python 3 is installed (required by node-gyp)
-
-## Features
-
-- **Native PCD Parser**: High-performance C++ PCD file parsing
-- **PCD Format Support**: Reads ASCII and binary PCD formats
-- **Dynamic Colorization**: Color by any field (label, intensity, RGB, reflectivity, etc.)
-- **Selection Tools**: Box select and lasso select for choosing points
-- **Semantic Labeling**: Assign labels to selected points
-- **Configurable Labels**: Add/edit/remove labels with custom colors
-- **RGB Colorization**: When R, G, B fields are present, shows actual colors
-- **File Navigation**: Browse through PCD files in a folder
-- **Label Persistence**: Labels are embedded directly in PCD files
-- **Format Conversion**: Convert between ASCII and binary PCD formats
-
-## Keyboard Shortcuts
+## ⌨️ Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
+| `H` or `?` | Show keyboard shortcuts |
 | `N` / `→` | Next file |
 | `P` / `←` | Previous file |
 | `Ctrl+S` | Save labels |
@@ -103,44 +61,69 @@ The C++ native addon failed to build. Check the build output and ensure:
 | `R` | Reset camera |
 | `C` | Cycle colorization |
 
-## Mouse Controls
+## 🖱️ Mouse Controls
 
 - **Left click + drag**: Select points (box or lasso)
 - **Right click + drag**: Orbit camera
-- **Scroll**: Zoom in/out
 - **Middle click + drag**: Pan camera
+- **Scroll**: Zoom in/out
 
-## Label Storage
+## 💾 Save Formats
 
-Labels are embedded directly in PCD files as a `label` field:
-- When you save (Ctrl+S), the label values are written into the PCD file
-- Labels persist with the point cloud data
+Use the **Format** dropdown to choose output format:
 
-## Configuring Labels
+| Format | Description |
+|--------|-------------|
+| Auto | Preserves original file format |
+| ASCII | Human-readable text format |
+| Binary | Efficient binary format |
+| Compressed | LZF-compressed binary (smallest) |
 
-Click the ⚙️ button in the label panel to add, edit, or remove labels.
-Labels are saved to `labels.yaml` in the project root.
+## 🎨 View Planes
 
-## Test Data
+Switch between orthogonal views for precise labeling:
 
-Sample PCD files are provided in `sample_data/`:
-- `urban_scene.pcd` - Urban scene with buildings, cars, pedestrians
-- `small_scene.pcd` - Smaller test scene
-- `rgb_demo.pcd` - Demo with RGB color fields
+- **Free**: Default 3D orbit view
+- **XY (Top)**: Bird's eye view, looking down Z-axis
+- **XZ (Front)**: Front view, looking down Y-axis
+- **YZ (Side)**: Side view, looking down X-axis
 
-## Project Structure
+The grid automatically rotates to match the selected view plane.
+
+## 📁 Project Structure
 
 ```
 labeling_tool/
-├── native/src/           # C++ native addon source
-│   ├── pcd_parser.h      # PCD parser header
-│   ├── pcd_parser.cpp    # PCD parser implementation
+├── native/src/           # C++ native addon
+│   ├── pcd_parser.cpp    # PCD parser with LZF compression
 │   └── bindings.cpp      # Node.js N-API bindings
-├── public/               # Frontend files
+├── public/               # Frontend
 │   ├── js/               # JavaScript modules
 │   └── css/              # Stylesheets
-├── sample_data/          # Sample PCD files
+├── sample_data/          # Example PCD files
 ├── server.js             # Express server
-├── binding.gyp           # Node-gyp build config
-└── package.json
+└── labels.yaml           # Label configuration
 ```
+
+## 🔧 Troubleshooting
+
+### Native addon build errors
+
+```bash
+# Ensure node-gyp is installed
+npm install -g node-gyp
+
+# Clean rebuild
+rm -rf build node_modules
+npm install
+```
+
+### "Native parser not available"
+
+The C++ addon failed to build. Ensure you have:
+- A C++ compiler (`g++` or `clang++`)
+- Python 3 (required by node-gyp)
+
+## 📄 License
+
+[MIT](LICENSE) © Spencer Pao
