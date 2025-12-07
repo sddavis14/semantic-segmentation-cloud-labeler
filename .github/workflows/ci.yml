@@ -39,5 +39,5 @@ jobs:
 
       - name: Start server (smoke test)
         run: |
-          timeout 5 npm start || true
+          node -e "const {spawn} = require('child_process'); const s = spawn('npm', ['start'], {stdio:'inherit'}); setTimeout(() => {s.kill(); process.exit(0);}, 3000);"
           echo "Server started successfully"
