@@ -35,6 +35,7 @@ class App {
         // Setup callbacks
         this.fileBrowser.onFileChanged = (file) => this.loadFile(file);
         this.labelManager.onLabelsChanged = () => this.onLabelsChanged();
+        this.selectionManager.onSelectionChanged = () => this.onSelectionChanged();
 
         // Check for startup config (initial directory from CLI)
         await this.checkStartupConfig();
