@@ -1,11 +1,22 @@
 # Point Cloud Labeler
 
 [![CI](https://github.com/sddavis14/semantic-segmentation-cloud-labeler/actions/workflows/ci.yml/badge.svg)](https://github.com/sddavis14/semantic-segmentation-cloud-labeler/actions/workflows/ci.yml)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/sddavis14/semantic-segmentation-cloud-labeler)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A modern, web-based tool for labeling 3D LiDAR point clouds for semantic segmentation. Built with Three.js and a high-performance native C++ PCD parser.
 
 ![Point Cloud Labeler Interface](screenshot.png)
+
+## 🎮 Try It Now
+
+**No installation required!** Click the Codespaces badge above or:
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/sddavis14/semantic-segmentation-cloud-labeler)
+
+1. Wait for the environment to build (~2 min first time)
+2. Run `npm start -- --dir sample_data` in the terminal
+3. Click the forwarded port URL to open the app
 
 ## ✨ Features
 
@@ -22,7 +33,7 @@ A modern, web-based tool for labeling 3D LiDAR point clouds for semantic segment
 
 ### Prerequisites
 
-- **Node.js 18+**
+- **Node.js 24+**
 - **CMake 3.14+**
 - **C++ compiler** (Xcode CLI tools on macOS, build-essential on Linux)
 
