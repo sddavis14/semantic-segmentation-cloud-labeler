@@ -4,7 +4,7 @@
 
 A modern, web-based tool for labeling 3D LiDAR point clouds for semantic segmentation. Built with Three.js and a high-performance native C++ PCD parser.
 
-![Point Cloud Labeler Interface](sample_data/screenshot.png)
+![Point Cloud Labeler Interface](screenshot.png)
 
 ## ✨ Features
 
