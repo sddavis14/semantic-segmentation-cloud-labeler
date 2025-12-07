@@ -569,7 +569,11 @@ void PCDParser::writeAscii(std::ostream &stream, const PCDData &data) {
             if (pt < vec.size()) {
               using T = typename std::decay_t<decltype(vec)>::value_type;
               if constexpr (std::is_floating_point_v<T>) {
-                stream << std::fixed << std::setprecision(6) << vec[pt];
+                // Use precision 9 for float (IEEE 754 guarantees 9 significant
+                // digits for round-trip) and defaultfloat to use scientific
+                // notation when needed (e.g., for packed RGB values
+                // like 6.17e-39)
+                stream << std::defaultfloat << std::setprecision(9) << vec[pt];
               } else {
                 stream << static_cast<int64_t>(vec[pt]);
               }
@@ -657,9 +661,159 @@ void PCDParser::write(const std::string &filepath, const PCDData &data,
   write(filepath, data, binary ? "binary" : "ascii");
 }
 
+// Helper: Unpack packed RGB float field to separate r, g, b uint8 fields for
+// ASCII output
+static PCDData unpackRGBForAscii(const PCDData &input) {
+  // Find packed rgb field (float field named "rgb")
+  int rgbIdx = -1;
+  for (size_t i = 0; i < input.header.fields.size(); i++) {
+    const auto &f = input.header.fields[i];
+    std::string nameLower = f.name;
+    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(),
+                   ::tolower);
+    if (nameLower == "rgb" && f.type == 'F' && f.size == 4) {
+      rgbIdx = static_cast<int>(i);
+      break;
+    }
+  }
+
+  if (rgbIdx < 0) {
+    return input; // No packed RGB, return as-is
+  }
+
+  // Get the packed RGB data as floats
+  const auto *rgbFloats =
+      std::get_if<std::vector<float>>(&input.fieldData[rgbIdx]);
+  if (!rgbFloats) {
+    return input;
+  }
+
+  size_t numPoints = rgbFloats->size();
+
+  // Create unpacked r, g, b vectors
+  std::vector<uint8_t> rData(numPoints);
+  std::vector<uint8_t> gData(numPoints);
+  std::vector<uint8_t> bData(numPoints);
+
+  for (size_t i = 0; i < numPoints; i++) {
+    float packedFloat = (*rgbFloats)[i];
+
+    // Reinterpret float bits as uint32
+    uint32_t rgb;
+    std::memcpy(&rgb, &packedFloat, sizeof(float));
+
+    // Extract R, G, B bytes (PCL format: 0x00RRGGBB)
+    rData[i] = (rgb >> 16) & 0xFF;
+    gData[i] = (rgb >> 8) & 0xFF;
+    bData[i] = rgb & 0xFF;
+  }
+
+  // Build new PCDData with separate r, g, b fields
+  PCDData output;
+  output.header = input.header;
+  output.header.fields.clear();
+  output.fieldData.clear();
+
+  for (size_t i = 0; i < input.header.fields.size(); i++) {
+    if (static_cast<int>(i) == rgbIdx) {
+      // Replace rgb with r, g, b
+      output.header.addField("r", 1, 'U', 1);
+      output.header.addField("g", 1, 'U', 1);
+      output.header.addField("b", 1, 'U', 1);
+      output.fieldData.push_back(std::move(rData));
+      output.fieldData.push_back(std::move(gData));
+      output.fieldData.push_back(std::move(bData));
+    } else {
+      output.header.fields.push_back(input.header.fields[i]);
+      output.fieldData.push_back(input.fieldData[i]);
+    }
+  }
+
+  return output;
+}
+
+// Helper: Pack separate r, g, b uint8 fields back to packed RGB float for
+// binary output
+static PCDData packRGBForBinary(const PCDData &input) {
+  // Find separate r, g, b uint8 fields
+  int rIdx = -1, gIdx = -1, bIdx = -1;
+  for (size_t i = 0; i < input.header.fields.size(); i++) {
+    const auto &f = input.header.fields[i];
+    std::string nameLower = f.name;
+    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(),
+                   ::tolower);
+    if (nameLower == "r" && f.type == 'U' && f.size == 1)
+      rIdx = static_cast<int>(i);
+    if (nameLower == "g" && f.type == 'U' && f.size == 1)
+      gIdx = static_cast<int>(i);
+    if (nameLower == "b" && f.type == 'U' && f.size == 1)
+      bIdx = static_cast<int>(i);
+  }
+
+  if (rIdx < 0 || gIdx < 0 || bIdx < 0) {
+    return input; // No separate RGB, return as-is
+  }
+
+  // Get r, g, b data
+  const auto *rVec = std::get_if<std::vector<uint8_t>>(&input.fieldData[rIdx]);
+  const auto *gVec = std::get_if<std::vector<uint8_t>>(&input.fieldData[gIdx]);
+  const auto *bVec = std::get_if<std::vector<uint8_t>>(&input.fieldData[bIdx]);
+
+  if (!rVec || !gVec || !bVec) {
+    return input;
+  }
+
+  size_t numPoints = rVec->size();
+
+  // Create packed RGB float vector
+  std::vector<float> rgbFloats(numPoints);
+  for (size_t i = 0; i < numPoints; i++) {
+    uint32_t packed = (static_cast<uint32_t>((*rVec)[i]) << 16) |
+                      (static_cast<uint32_t>((*gVec)[i]) << 8) |
+                      static_cast<uint32_t>((*bVec)[i]);
+    std::memcpy(&rgbFloats[i], &packed, sizeof(float));
+  }
+
+  // Build new PCDData with packed rgb field
+  PCDData output;
+  output.header = input.header;
+  output.header.fields.clear();
+  output.fieldData.clear();
+
+  bool rgbAdded = false;
+  for (size_t i = 0; i < input.header.fields.size(); i++) {
+    int idx = static_cast<int>(i);
+    if (idx == rIdx) {
+      // Add packed rgb in place of r
+      output.header.addField("rgb", 4, 'F', 1);
+      output.fieldData.push_back(rgbFloats);
+      rgbAdded = true;
+    } else if (idx == gIdx || idx == bIdx) {
+      // Skip g and b (already merged into rgb)
+      continue;
+    } else {
+      output.header.fields.push_back(input.header.fields[i]);
+      output.fieldData.push_back(input.fieldData[i]);
+    }
+  }
+
+  return output;
+}
+
 void PCDParser::write(const std::string &filepath, const PCDData &data,
                       const std::string &format) {
   bool isBinary = (format == "binary" || format == "binary_compressed");
+
+  // Transform data for format compatibility
+  PCDData outputData;
+  if (!isBinary) {
+    // ASCII: unpack rgb to separate r, g, b for readability
+    outputData = unpackRGBForAscii(data);
+  } else {
+    // Binary: pack separate r, g, b back to rgb for efficiency
+    outputData = packRGBForBinary(data);
+  }
+
   std::ofstream file(filepath, isBinary ? std::ios::binary : std::ios::out);
   if (!file.is_open()) {
     throw std::runtime_error("Failed to open file for writing: " + filepath);
@@ -667,44 +821,44 @@ void PCDParser::write(const std::string &filepath, const PCDData &data,
 
   // Write header
   file << "# .PCD v0.7 - Point Cloud Data file format\n";
-  file << "VERSION " << data.header.version << "\n";
+  file << "VERSION " << outputData.header.version << "\n";
 
   file << "FIELDS";
-  for (const auto &f : data.header.fields) {
+  for (const auto &f : outputData.header.fields) {
     file << " " << f.name;
   }
   file << "\n";
 
   file << "SIZE";
-  for (const auto &f : data.header.fields) {
+  for (const auto &f : outputData.header.fields) {
     file << " " << f.size;
   }
   file << "\n";
 
   file << "TYPE";
-  for (const auto &f : data.header.fields) {
+  for (const auto &f : outputData.header.fields) {
     file << " " << f.type;
   }
   file << "\n";
 
   file << "COUNT";
-  for (const auto &f : data.header.fields) {
+  for (const auto &f : outputData.header.fields) {
     file << " " << f.count;
   }
   file << "\n";
 
-  file << "WIDTH " << data.numPoints() << "\n";
+  file << "WIDTH " << outputData.numPoints() << "\n";
   file << "HEIGHT 1\n";
-  file << "VIEWPOINT " << data.header.viewpoint << "\n";
-  file << "POINTS " << data.numPoints() << "\n";
+  file << "VIEWPOINT " << outputData.header.viewpoint << "\n";
+  file << "POINTS " << outputData.numPoints() << "\n";
   file << "DATA " << format << "\n";
 
   if (format == "binary_compressed") {
-    writeBinaryCompressed(file, data);
+    writeBinaryCompressed(file, outputData);
   } else if (format == "binary") {
-    writeBinary(file, data);
+    writeBinary(file, outputData);
   } else {
-    writeAscii(file, data);
+    writeAscii(file, outputData);
   }
 }
 

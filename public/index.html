@@ -22,6 +22,9 @@
                 <button id="btn-save" class="btn" title="Save Labels (Ctrl+S)">
                     <span class="icon">💾</span> Save
                 </button>
+                <button id="btn-reset" class="btn" title="Discard changes and reload file">
+                    <span class="icon">↩️</span> Reset
+                </button>
                 <div class="tool-group">
                     <span class="label">Format:</span>
                     <select id="save-format" title="Output format for saved files">
@@ -31,11 +34,7 @@
                         <option value="binary_compressed">Compressed</option>
                     </select>
                 </div>
-                <button id="btn-reset" class="btn" title="Discard changes and reload file">
-                    <span class="icon">↩️</span> Reset
-                </button>
-            </div>
-            <div class="toolbar-section">
+                <div class="separator"></div>
                 <div class="tool-group">
                     <span class="label">Selection:</span>
                     <button id="btn-box-select" class="btn tool-btn active" title="Box Select (B)">
@@ -53,6 +52,15 @@
                         <!-- Additional fields populated dynamically -->
                     </select>
                 </div>
+                <div class="tool-group color-bounds-controls" id="color-bounds-controls" style="display: none;">
+                    <span class="label">Min:</span>
+                    <input type="range" id="color-min" min="0" max="1" value="0" step="0.001">
+                    <span id="color-min-value" class="bound-value">0</span>
+                    <span class="label">Max:</span>
+                    <input type="range" id="color-max" min="0" max="1" value="1" step="0.001">
+                    <span id="color-max-value" class="bound-value">1</span>
+                    <button id="btn-reset-bounds" class="btn btn-sm" title="Reset to auto-detected bounds">⟲</button>
+                </div>
                 <div class="tool-group">
                     <span class="label">Size:</span>
                     <input type="range" id="point-size" min="0" max="1" value="0.5" step="0.01" title="Point Size">
@@ -61,16 +69,6 @@
                 <button id="btn-reset-view" class="btn" title="Reset Camera (R)">
                     <span class="icon">🎯</span>
                 </button>
-                <div class="separator"></div>
-                <div class="tool-group nav-group">
-                    <button id="btn-prev" class="btn" title="Previous File (←)">
-                        <span class="icon">◀</span>
-                    </button>
-                    <span id="file-progress" class="file-progress">0 / 0</span>
-                    <button id="btn-next" class="btn" title="Next File (→)">
-                        <span class="icon">▶</span>
-                    </button>
-                </div>
             </div>
         </header>
 
@@ -128,6 +126,15 @@
             </div>
             <div class="status-center">
                 <span id="status-filename">No file loaded</span>
+            </div>
+            <div class="status-right nav-controls">
+                <button id="btn-prev" class="btn btn-sm" title="Previous File (←)">
+                    <span class="icon">◀</span>
+                </button>
+                <span id="file-progress" class="file-progress">0 / 0</span>
+                <button id="btn-next" class="btn btn-sm" title="Next File (→)">
+                    <span class="icon">▶</span>
+                </button>
             </div>
         </footer>
 
@@ -264,12 +271,12 @@
     <script src="js/TrackballControls.js?v=2"></script>
 
     <!-- App Scripts -->
-    <script src="js/colorizer.js?v=21"></script>
+    <script src="js/colorizer.js?v=23"></script>
     <script src="js/labels.js?v=20"></script>
     <script src="js/selection.js?v=20"></script>
-    <script src="js/viewer.js?v=29"></script>
+    <script src="js/viewer.js?v=30"></script>
     <script src="js/file-browser.js?v=20"></script>
-    <script src="js/app.js?v=35"></script>
+    <script src="js/app.js?v=39"></script>
 </body>
 
 </html>

@@ -184,43 +184,6 @@ class PointCloudViewer {
     enableControls(enabled) {
         this.controls.enabled = enabled;
     }
-
-    /**
-     * Set whether to invert the camera view direction
-     * @param {boolean} inverted - true to view from opposite side
-     */
-    setInvertView(inverted) {
-        if (!this.points) return;
-
-        // Calculate bounding box to position camera appropriately
-        const geometry = this.points.geometry;
-        geometry.computeBoundingBox();
-        const bbox = geometry.boundingBox;
-        const center = new THREE.Vector3();
-        bbox.getCenter(center);
-
-        const size = new THREE.Vector3();
-        bbox.getSize(size);
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const distance = maxDim * 2;
-
-        // Reset controls target to center
-        this.controls.target.copy(center);
-
-        // Y-up for consistent orbit behavior
-        this.camera.up.set(0, 1, 0);
-
-        // Isometric view - from opposite corner when inverted
-        const sign = inverted ? -1 : 1;
-        this.camera.position.set(
-            center.x + sign * distance * 0.7,
-            center.y + distance * 0.7,
-            center.z + sign * distance * 0.7
-        );
-
-        this.camera.lookAt(center);
-        this.controls.update();
-    }
 }
 
 window.PointCloudViewer = PointCloudViewer;

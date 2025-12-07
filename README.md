@@ -10,8 +10,8 @@ A modern, web-based tool for labeling 3D LiDAR point clouds for semantic segment
 
 - **High-Performance Parsing**: Native C++ addon for fast PCD file loading
 - **Multiple Save Formats**: ASCII, Binary, and LZF-compressed Binary
+- **Format Display**: Shows current file format (ASCII/BINARY) in viewport badge
 - **Dynamic Colorization**: Color by label, RGB, intensity, or any field
-- **View Plane Switching**: Quickly snap to XY, XZ, or YZ orthogonal views  
 - **Selection Tools**: Box and lasso selection for precise labeling
 - **Configurable Labels**: Add custom labels with unique colors
 - **Keyboard Shortcuts**: Full keyboard navigation (press `H` for cheat sheet)
@@ -50,11 +50,11 @@ npm start -- --dir /path/to/pcd/files
 | Key | Action |
 |-----|--------|
 | `H` or `?` | Show keyboard shortcuts |
-| `N` / `→` | Next file |
-| `P` / `←` | Previous file |
+| `N` / `Right Arrow` | Next file |
+| `P` / `Left Arrow` | Previous file |
 | `Ctrl+S` | Save labels |
 | `Ctrl+O` | Open folder |
-| `0-9` | Quick assign label |
+| `0-9` | Select current label |
 | `Escape` | Clear selection |
 | `B` | Box select mode |
 | `L` | Lasso select mode |
@@ -63,10 +63,12 @@ npm start -- --dir /path/to/pcd/files
 
 ## 🖱️ Mouse Controls
 
-- **Left click + drag**: Select points (box or lasso)
-- **Right click + drag**: Orbit camera
-- **Middle click + drag**: Pan camera
-- **Scroll**: Zoom in/out
+| Action | Control |
+|--------|---------|
+| **Select points** | Left-click + drag (box or lasso) |
+| **Rotate camera** | Right-click + drag |
+| **Pan camera** | Shift + Right-click + drag |
+| **Zoom** | Scroll wheel or Middle-click + drag |
 
 ## 💾 Save Formats
 
@@ -78,17 +80,6 @@ Use the **Format** dropdown to choose output format:
 | ASCII | Human-readable text format |
 | Binary | Efficient binary format |
 | Compressed | LZF-compressed binary (smallest) |
-
-## 🎨 View Planes
-
-Switch between orthogonal views for precise labeling:
-
-- **Free**: Default 3D orbit view
-- **XY (Top)**: Bird's eye view, looking down Z-axis
-- **XZ (Front)**: Front view, looking down Y-axis
-- **YZ (Side)**: Side view, looking down X-axis
-
-The grid automatically rotates to match the selected view plane.
 
 ## 📁 Project Structure
 

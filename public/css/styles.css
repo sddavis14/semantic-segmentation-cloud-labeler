@@ -88,6 +88,20 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
+}
+
+.nav-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nav-controls .file-progress {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 50px;
+    text-align: center;
 }
 
 .separator {
@@ -95,6 +109,28 @@ body {
     height: 28px;
     background: var(--border-color);
     margin: 0 6px;
+}
+
+/* Color bounds controls */
+.color-bounds-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.color-bounds-controls input[type="range"] {
+    width: 80px;
+}
+
+.color-bounds-controls .bound-value {
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-width: 40px;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
 }
 
 /* === Buttons === */

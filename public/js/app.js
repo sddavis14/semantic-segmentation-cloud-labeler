@@ -9,6 +9,7 @@ class App {
         this.fileBrowser = new FileBrowser();
         this.activeLabel = 0; // Currently active label ID for assignment
         this.lastSelectionCount = 0; // Track last selection count for status display
+        this.currentFormat = ''; // Current PCD file format (ascii/binary)
 
         this.init();
     }
@@ -156,7 +157,19 @@ class App {
         // Colorization
         document.getElementById('colorize-mode').addEventListener('change', (e) => {
             this.viewer.setColorMode(e.target.value);
+            this.updateColorBoundsControls();
             this.updateColors();
+        });
+
+        // Color bounds sliders
+        document.getElementById('color-min').addEventListener('input', (e) => {
+            this.onColorBoundsChange();
+        });
+        document.getElementById('color-max').addEventListener('input', (e) => {
+            this.onColorBoundsChange();
+        });
+        document.getElementById('btn-reset-bounds').addEventListener('click', () => {
+            this.resetColorBounds();
         });
 
         // Point size slider with logarithmic scaling
@@ -702,6 +715,9 @@ class App {
             this.updateStatusBar();
             this.updateFileProgress();
             this.updateFileTreeSelection();
+
+            // Update format badge from the parse response header
+            this.currentFormat = data.header.dataType || '';
             this.updatePCDFormatLabel();
 
             console.log(`Loaded ${file.name} with ${result.pointCount} points using native parser`);
@@ -754,6 +770,13 @@ class App {
                 this.labelManager.markClean();
                 this.clearDirtyIndicator();
                 this.updateStatusBar();
+
+                // Update format if a specific format was selected
+                if (format) {
+                    this.currentFormat = format;
+                }
+                this.updatePCDFormatLabel();
+
                 const fileName = filePath.split('/').pop();
                 this.showNotification(`Labels saved to ${fileName}`, 'success');
             } else {
@@ -866,69 +889,16 @@ class App {
         }, 3000);
     }
 
-    async updatePCDFormatLabel() {
-        const currentFile = this.fileBrowser.getCurrentFile();
+    updatePCDFormatLabel() {
         const formatBadge = document.getElementById('pcd-format-badge');
 
         if (!formatBadge) return;
 
-        if (!currentFile || !currentFile.path) {
+        if (this.currentFormat) {
+            formatBadge.textContent = this.currentFormat.toUpperCase();
+            formatBadge.classList.remove('hidden');
+        } else {
             formatBadge.classList.add('hidden');
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/pcd/format?path=${encodeURIComponent(currentFile.path)}`);
-            const data = await response.json();
-            if (data.format) {
-                formatBadge.textContent = data.format.toUpperCase();
-                formatBadge.classList.remove('hidden');
-            } else {
-                formatBadge.classList.add('hidden');
-            }
-        } catch (err) {
-            console.error('Failed to get PCD format:', err);
-            formatBadge.classList.add('hidden');
-        }
-    }
-
-
-    async convertPCDFormat() {
-        const currentFile = this.fileBrowser.getCurrentFile();
-        if (!currentFile || !currentFile.path) {
-            alert('No file loaded');
-            return;
-        }
-
-        // Get current format
-        const formatLabel = document.getElementById('pcd-format-label').textContent.toLowerCase();
-        const targetFormat = formatLabel === 'ascii' ? 'binary' : 'ascii';
-
-        if (!confirm(`Convert "${currentFile.name}" to ${targetFormat.toUpperCase()} format?`)) {
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/pcd/convert-format', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    pcdPath: currentFile.path,
-                    targetFormat: targetFormat
-                })
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                this.showNotification(`Converted to ${result.format.toUpperCase()} format!`, 'success');
-                // Reload the file to get the new format and updated data
-                await this.loadFile(currentFile);
-            } else {
-                alert('Failed to convert format: ' + (result.error || 'Unknown error'));
-            }
-        } catch (err) {
-            console.error('Failed to convert format:', err);
-            alert('Failed to convert format: ' + err.message);
         }
     }
 
@@ -1056,6 +1026,10 @@ class App {
         if (Array.from(select.options).some(opt => opt.value === currentValue)) {
             select.value = currentValue;
         }
+
+        // Apply the color mode and update controls
+        this.viewer.setColorMode(select.value);
+        this.updateColorBoundsControls();
     }
 
     cycleColorMode() {
@@ -1066,6 +1040,71 @@ class App {
         select.selectedIndex = nextIndex;
 
         this.viewer.setColorMode(select.value);
+        this.updateColorBoundsControls();
+        this.updateColors();
+    }
+
+    // Update color bounds controls visibility and values based on current mode
+    updateColorBoundsControls() {
+        const mode = document.getElementById('colorize-mode').value;
+        const controlsDiv = document.getElementById('color-bounds-controls');
+
+        // Show controls only for scalar fields (not label or rgb)
+        const isScalarField = mode !== 'label' && mode !== 'rgb';
+        controlsDiv.style.display = isScalarField ? 'flex' : 'none';
+
+        if (isScalarField) {
+            // Get field bounds from colorizer
+            const bounds = this.viewer.colorizer.fieldBounds[mode];
+            if (bounds) {
+                const minSlider = document.getElementById('color-min');
+                const maxSlider = document.getElementById('color-max');
+
+                // Set slider range to field bounds
+                minSlider.min = bounds.min;
+                minSlider.max = bounds.max;
+                minSlider.step = (bounds.max - bounds.min) / 1000;
+                minSlider.value = bounds.min;
+
+                maxSlider.min = bounds.min;
+                maxSlider.max = bounds.max;
+                maxSlider.step = (bounds.max - bounds.min) / 1000;
+                maxSlider.value = bounds.max;
+
+                // Update display values
+                document.getElementById('color-min-value').textContent = bounds.min.toFixed(2);
+                document.getElementById('color-max-value').textContent = bounds.max.toFixed(2);
+            }
+        }
+    }
+
+    // Handle color bounds slider changes
+    onColorBoundsChange() {
+        const minSlider = document.getElementById('color-min');
+        const maxSlider = document.getElementById('color-max');
+
+        let minVal = parseFloat(minSlider.value);
+        let maxVal = parseFloat(maxSlider.value);
+
+        // Ensure min < max
+        if (minVal >= maxVal) {
+            minVal = maxVal - parseFloat(minSlider.step);
+            minSlider.value = minVal;
+        }
+
+        // Update display values
+        document.getElementById('color-min-value').textContent = minVal.toFixed(2);
+        document.getElementById('color-max-value').textContent = maxVal.toFixed(2);
+
+        // Apply custom bounds to colorizer
+        this.viewer.colorizer.setCustomBounds(minVal, maxVal);
+        this.updateColors();
+    }
+
+    // Reset color bounds to auto-detected values
+    resetColorBounds() {
+        this.viewer.colorizer.clearCustomBounds();
+        this.updateColorBoundsControls();
         this.updateColors();
     }
 

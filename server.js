@@ -150,33 +150,6 @@ app.post('/api/pcd/convert-format', (req, res) => {
     }
 });
 
-// API: Get current PCD format (uses native parser header info)
-app.get('/api/pcd/format', (req, res) => {
-    const filePath = req.query.path;
-
-    if (!filePath) {
-        return res.status(400).json({ error: 'Path required' });
-    }
-
-    const resolvedPath = path.resolve(filePath);
-
-    if (!fs.existsSync(resolvedPath)) {
-        return res.status(404).json({ error: 'File not found' });
-    }
-
-    if (!pcdParser) {
-        return res.status(500).json({ error: 'Native parser not available' });
-    }
-
-    try {
-        const data = pcdParser.parse(resolvedPath);
-        const format = data.header.dataType || 'unknown';
-        res.json({ format: format.toLowerCase() });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 // API: Browse directories (for folder picker)
 app.get('/api/browse', (req, res) => {
     let dirPath = req.query.dir || process.env.HOME || '/';

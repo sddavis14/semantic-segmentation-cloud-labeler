@@ -6,12 +6,33 @@ class Colorizer {
         this.mode = 'label'; // 'label', 'rgb', or any field name
         this.labelColors = new Map();
         this.fieldData = {}; // Dynamic field data from native parser
-        this.fieldBounds = {}; // Min/max for each field
+        this.fieldBounds = {}; // Min/max for each field (auto-detected)
+        this.customBounds = null; // User-overridden {min, max} for current field
         this.hasRGB = false; // Whether R, G, B fields are present
     }
 
     setMode(mode) {
         this.mode = mode;
+        // Clear custom bounds when mode changes
+        this.customBounds = null;
+    }
+
+    // Set custom min/max bounds for gradient colorization
+    setCustomBounds(min, max) {
+        this.customBounds = { min, max };
+    }
+
+    // Clear custom bounds (use auto-detected)
+    clearCustomBounds() {
+        this.customBounds = null;
+    }
+
+    // Get current effective bounds for the active mode
+    getEffectiveBounds() {
+        if (this.customBounds) {
+            return this.customBounds;
+        }
+        return this.fieldBounds[this.mode] || { min: 0, max: 1 };
     }
 
     setLabelColors(labelDefinitions) {
@@ -69,6 +90,15 @@ class Colorizer {
         return null;
     }
 
+    // Get field bounds by name (case-insensitive)
+    getFieldBounds(name) {
+        const lower = name.toLowerCase();
+        for (const [key, bounds] of Object.entries(this.fieldBounds)) {
+            if (key.toLowerCase() === lower) return bounds;
+        }
+        return null;
+    }
+
     hexToRgb(hex) {
         const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
         return result ? {
@@ -119,13 +149,12 @@ class Colorizer {
                 b = color.b;
             } else if (this.mode === 'rgb' && rData && gData && bData) {
                 // Use actual RGB values from point cloud (separate channels)
-                // Normalize from 0-255 to 0-1
                 const rVal = rData[i];
                 const gVal = gData[i];
                 const bVal = bData[i];
 
-                // Detect if values are 0-255 or 0-1 range
-                const rBounds = this.fieldBounds['r'] || this.fieldBounds['R'];
+                // Get bounds using case-insensitive lookup
+                const rBounds = this.getFieldBounds('r');
                 if (rBounds && rBounds.max > 1) {
                     // 0-255 range
                     r = rVal / 255;
@@ -155,12 +184,12 @@ class Colorizer {
             } else {
                 // Color by field value (gradient)
                 const fieldData = this.fieldData[this.mode];
-                const bounds = this.fieldBounds[this.mode];
+                const bounds = this.getEffectiveBounds();
 
-                if (fieldData && bounds && fieldData.length > i) {
+                if (fieldData && fieldData.length > i) {
                     const value = fieldData[i];
                     const range = bounds.max - bounds.min;
-                    const norm = range > 0 ? (value - bounds.min) / range : 0.5;
+                    const norm = range > 0 ? Math.max(0, Math.min(1, (value - bounds.min) / range)) : 0.5;
                     ({ r, g, b } = this.rainbowGradient(norm));
                 } else {
                     r = g = b = 0.5;
