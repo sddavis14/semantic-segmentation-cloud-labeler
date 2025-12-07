@@ -11,13 +11,13 @@
         "<!@(node -p \"require('node-addon-api').include\")",
         "native/pcd_parser/include"
       ],
-      "libraries": [
-        "../native/pcd_parser/build/libpcd_parser.dylib",
-        "../native/pcd_parser/build/liblzf.dylib"
-      ],
       "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
       "conditions": [
         ["OS=='mac'", {
+          "libraries": [
+            "../native/pcd_parser/build/libpcd_parser.dylib",
+            "../native/pcd_parser/build/liblzf.dylib"
+          ],
           "xcode_settings": {
             "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
             "CLANG_CXX_LIBRARY": "libc++",
@@ -25,10 +25,13 @@
           }
         }],
         ["OS=='linux'", {
-          "cflags_cc": ["-std=c++17", "-fexceptions"],
           "libraries": [
             "../native/pcd_parser/build/libpcd_parser.so",
             "../native/pcd_parser/build/liblzf.so"
+          ],
+          "cflags_cc": ["-std=c++17", "-fexceptions"],
+          "ldflags": [
+            "-Wl,-rpath,'$$ORIGIN'"
           ]
         }],
         ["OS=='win'", {
