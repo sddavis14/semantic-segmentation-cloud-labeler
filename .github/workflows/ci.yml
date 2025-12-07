@@ -8,6 +8,7 @@ on:
 
 jobs:
   build-and-test:
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -33,6 +34,9 @@ jobs:
 
       - name: Run C++ unit tests
         run: npm test
+
+      - name: Rebuild for node addon after tests
+        run: npm run build
 
       - name: Verify native module loads
         run: node -e "const pcd = require('./build/Release/pcd_parser.node'); console.log('Native module loaded:', Object.keys(pcd));"
