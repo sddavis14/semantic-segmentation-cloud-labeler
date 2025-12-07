@@ -314,6 +314,17 @@ input[type="range"]::-moz-range-thumb {
     text-overflow: ellipsis;
 }
 
+.tree-file-dirty {
+    display: none;
+    color: #f59e0b;
+    font-size: 10px;
+    margin-left: 4px;
+}
+
+.tree-file.dirty .tree-file-dirty {
+    display: inline;
+}
+
 /* === 3D Viewport === */
 #viewport {
     flex: 1;

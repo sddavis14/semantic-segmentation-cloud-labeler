@@ -594,6 +594,7 @@ class App {
             fileNode.innerHTML = `
                 <span class="tree-file-icon">📄</span>
                 <span class="tree-file-name">${file.name}</span>
+                <span class="tree-file-dirty" title="Unsaved changes">●</span>
             `;
             fileNode.addEventListener('click', async () => {
                 if (file.handle) {
@@ -707,6 +708,7 @@ class App {
             const result = await response.json();
             if (result.success) {
                 this.labelManager.markClean();
+                this.clearDirtyIndicator();
                 this.updateStatusBar();
                 this.showNotification('Labels saved successfully!', 'success');
             } else {
@@ -843,6 +845,41 @@ class App {
 
         this.labelManager.assignLabel(selected, labelId);
         this.selectionManager.clearSelection();
+    }
+
+    onLabelsChanged() {
+        this.updateColors();
+        this.updateStatusBar();
+        this.updateDirtyIndicator();
+    }
+
+    updateDirtyIndicator() {
+        const currentFile = this.fileBrowser.getCurrentFile();
+        if (!currentFile) return;
+
+        const currentPath = currentFile.path || currentFile.name;
+        const isDirty = this.labelManager.isDirty();
+
+        // Find the file node in the tree
+        const fileNodes = document.querySelectorAll('.tree-file');
+        fileNodes.forEach(node => {
+            if (node.dataset.path === currentPath) {
+                node.classList.toggle('dirty', isDirty);
+            }
+        });
+    }
+
+    clearDirtyIndicator() {
+        const currentFile = this.fileBrowser.getCurrentFile();
+        if (!currentFile) return;
+
+        const currentPath = currentFile.path || currentFile.name;
+        const fileNodes = document.querySelectorAll('.tree-file');
+        fileNodes.forEach(node => {
+            if (node.dataset.path === currentPath) {
+                node.classList.remove('dirty');
+            }
+        });
     }
 
     onSelectionChanged() {
