@@ -1,5 +1,6 @@
 # Point Cloud Labeler
 
+[![CI](https://github.com/sddavis14/semantic-segmentation-cloud-labeler/actions/workflows/ci.yml/badge.svg)](https://github.com/sddavis14/semantic-segmentation-cloud-labeler/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A modern, web-based tool for labeling 3D LiDAR point clouds for semantic segmentation. Built with Three.js and a high-performance native C++ PCD parser.
