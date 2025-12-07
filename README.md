@@ -126,4 +126,4 @@ The C++ addon failed to build. Ensure you have:
 
 ## 📄 License
 
-[MIT](LICENSE) © Spencer Pao
+[MIT](LICENSE) © Spencer Davis
