@@ -67,6 +67,21 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 npm start -- --dir /path/to/pcd/files
 ```
 
+### Change the Port
+
+The server runs on port 3000 by default. To use a different port, set the `PORT` environment variable:
+
+```bash
+# Linux/macOS
+PORT=8080 npm start
+
+# Windows (PowerShell)
+$env:PORT=8080; npm start
+
+# Windows (Command Prompt)
+set PORT=8080 && npm start
+```
+
 ## ⌨️ Keyboard Shortcuts
 
 | Key | Action |

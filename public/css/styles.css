@@ -225,12 +225,17 @@ body {
 /* === Select Dropdown === */
 select {
     padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-elevated);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     color: var(--text-primary);
     font-size: 13px;
     cursor: pointer;
+}
+
+select option {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
 }
 
 select:focus {

@@ -218,6 +218,102 @@ struct PCDData {
 
     return positions;
   }
+
+  // Get RGB as interleaved colors for Three.js (r,g,b,r,g,b,...)
+  // Handles: separate R/G/B fields, packed rgb (float or uint32), packed rgba (float or uint32)
+  // Returns normalized floats in [0,1] range
+  std::vector<float> getRGB() const {
+    size_t n = numPoints();
+    if (n == 0) return {};
+
+    std::vector<float> colors(n * 3);
+
+    // Check for separate R, G, B fields first
+    int rIdx = header.findField("r");
+    int gIdx = header.findField("g");
+    int bIdx = header.findField("b");
+
+    if (rIdx >= 0 && gIdx >= 0 && bIdx >= 0) {
+      auto rData = getFieldAsFloat(rIdx);
+      auto gData = getFieldAsFloat(gIdx);
+      auto bData = getFieldAsFloat(bIdx);
+
+      // Determine if values are 0-255 or 0-1 range
+      float maxVal = 0;
+      for (size_t i = 0; i < std::min(n, rData.size()); i++) {
+        maxVal = std::max(maxVal, std::max(rData[i], std::max(gData[i], bData[i])));
+      }
+      float scale = maxVal > 1.0f ? 1.0f / 255.0f : 1.0f;
+
+      for (size_t i = 0; i < n; i++) {
+        colors[i * 3] = (i < rData.size() ? rData[i] : 0) * scale;
+        colors[i * 3 + 1] = (i < gData.size() ? gData[i] : 0) * scale;
+        colors[i * 3 + 2] = (i < bData.size() ? bData[i] : 0) * scale;
+      }
+      return colors;
+    }
+
+    // Check for packed rgb field
+    int rgbIdx = header.findField("rgb");
+    int rgbaIdx = header.findField("rgba");
+    int packedIdx = rgbIdx >= 0 ? rgbIdx : rgbaIdx;
+
+    if (packedIdx >= 0) {
+      const auto& field = header.fields[packedIdx];
+      const auto& fd = fieldData[packedIdx];
+
+      // Handle based on field type
+      if (field.type == 'F' && field.size == 4) {
+        // Float type - PCL format where bits represent packed RGB
+        const auto* floatVec = std::get_if<std::vector<float>>(&fd);
+        if (floatVec) {
+          for (size_t i = 0; i < n && i < floatVec->size(); i++) {
+            float packedFloat = (*floatVec)[i];
+            uint32_t packed;
+            std::memcpy(&packed, &packedFloat, sizeof(float));
+            colors[i * 3] = ((packed >> 16) & 0xFF) / 255.0f;
+            colors[i * 3 + 1] = ((packed >> 8) & 0xFF) / 255.0f;
+            colors[i * 3 + 2] = (packed & 0xFF) / 255.0f;
+          }
+          return colors;
+        }
+      } else if (field.type == 'U' && field.size == 4) {
+        // Uint32 type - direct packed RGB/RGBA
+        const auto* uint32Vec = std::get_if<std::vector<uint32_t>>(&fd);
+        if (uint32Vec) {
+          for (size_t i = 0; i < n && i < uint32Vec->size(); i++) {
+            uint32_t packed = (*uint32Vec)[i];
+            colors[i * 3] = ((packed >> 16) & 0xFF) / 255.0f;
+            colors[i * 3 + 1] = ((packed >> 8) & 0xFF) / 255.0f;
+            colors[i * 3 + 2] = (packed & 0xFF) / 255.0f;
+          }
+          return colors;
+        }
+      }
+    }
+
+    // No RGB data found - return empty
+    return {};
+  }
+
+  // Check if RGB data is available and can be extracted
+  bool hasRGB() const {
+    // Check for separate R, G, B
+    if (header.findField("r") >= 0 && header.findField("g") >= 0 && header.findField("b") >= 0) {
+      return true;
+    }
+    // Check for packed rgb or rgba with valid type/size
+    int rgbIdx = header.findField("rgb");
+    int rgbaIdx = header.findField("rgba");
+    int packedIdx = rgbIdx >= 0 ? rgbIdx : rgbaIdx;
+    
+    if (packedIdx >= 0 && packedIdx < static_cast<int>(header.fields.size())) {
+      const auto& field = header.fields[packedIdx];
+      // Must be float32 (PCL packed) or uint32 (direct packed)
+      return (field.type == 'F' && field.size == 4) || (field.type == 'U' && field.size == 4);
+    }
+    return false;
+  }
 };
 
 class PCDParser {

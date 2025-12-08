@@ -24,7 +24,7 @@ try {
     pcdParser = require('./build/Release/pcd_parser.node');
     console.log('✅ Native PCD parser loaded');
 } catch (err) {
-    console.warn('⚠️  Native PCD parser not available, falling back to JS:', err.message);
+    console.warn('⚠️  Native PCD parser not available, cannot load point clouds', err.message);
 }
 
 const app = express();
@@ -80,7 +80,9 @@ app.get('/api/pcd/parse', (req, res) => {
             },
             positions: Array.from(data.positions),
             labels: Array.from(data.labels),
-            fields: fields
+            fields: fields,
+            hasRGB: data.hasRGB || false,
+            rgb: data.rgb ? Array.from(data.rgb) : null
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

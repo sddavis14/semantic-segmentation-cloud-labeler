@@ -1,5 +1,6 @@
 /**
  * Colorizer - Point cloud colorization strategies with dynamic field support
+ * RGB/RGBA processing is now handled by the native C++ parser
  */
 class Colorizer {
     constructor() {
@@ -8,7 +9,8 @@ class Colorizer {
         this.fieldData = {}; // Dynamic field data from native parser
         this.fieldBounds = {}; // Min/max for each field (auto-detected)
         this.customBounds = null; // User-overridden {min, max} for current field
-        this.hasRGB = false; // Whether R, G, B fields are present
+        this.rgbData = null; // Pre-processed RGB data from C++ (interleaved r,g,b,r,g,b,...)
+        this._hasRGB = false; // Whether RGB data is available
     }
 
     setMode(mode) {
@@ -46,15 +48,6 @@ class Colorizer {
     setFieldData(fields) {
         this.fieldData = fields || {};
 
-        // Detect RGB fields (case-insensitive)
-        const fieldNames = Object.keys(this.fieldData).map(n => n.toLowerCase());
-
-        // Check for separate R, G, B fields
-        this.hasRGB = fieldNames.includes('r') && fieldNames.includes('g') && fieldNames.includes('b');
-
-        // Check for packed RGB field (PCL format - single field named 'rgb')
-        this.hasPackedRGB = fieldNames.includes('rgb');
-
         // Compute bounds for all numeric fields
         this.fieldBounds = {};
         for (const [name, data] of Object.entries(this.fieldData)) {
@@ -71,9 +64,15 @@ class Colorizer {
         }
     }
 
+    // Set pre-processed RGB data from native C++ parser
+    setRGBData(rgbArray, hasRGB) {
+        this.rgbData = rgbArray || null;
+        this._hasRGB = hasRGB || false;
+    }
+
     // Check if RGB colorization is available
     hasRGBFields() {
-        return this.hasRGB || this.hasPackedRGB;
+        return this._hasRGB;
     }
 
     // Get available field names for colorization
@@ -119,19 +118,6 @@ class Colorizer {
         const pointCount = positions.length / 3;
         const colors = new Float32Array(pointCount * 3);
 
-        // Get RGB data if in RGB mode
-        let rData = null, gData = null, bData = null;
-        let packedRgbData = null;
-        if (this.mode === 'rgb') {
-            if (this.hasRGB) {
-                rData = this.getField('r');
-                gData = this.getField('g');
-                bData = this.getField('b');
-            } else if (this.hasPackedRGB) {
-                packedRgbData = this.getField('rgb');
-            }
-        }
-
         for (let i = 0; i < pointCount; i++) {
             let r, g, b;
 
@@ -147,40 +133,11 @@ class Colorizer {
                 r = color.r;
                 g = color.g;
                 b = color.b;
-            } else if (this.mode === 'rgb' && rData && gData && bData) {
-                // Use actual RGB values from point cloud (separate channels)
-                const rVal = rData[i];
-                const gVal = gData[i];
-                const bVal = bData[i];
-
-                // Get bounds using case-insensitive lookup
-                const rBounds = this.getFieldBounds('r');
-                if (rBounds && rBounds.max > 1) {
-                    // 0-255 range
-                    r = rVal / 255;
-                    g = gVal / 255;
-                    b = bVal / 255;
-                } else {
-                    // Already 0-1 range
-                    r = rVal;
-                    g = gVal;
-                    b = bVal;
-                }
-            } else if (this.mode === 'rgb' && packedRgbData) {
-                // PCL packed RGB format: float bits represent uint32 with 0x00RRGGBB
-                const packedFloat = packedRgbData[i];
-
-                // Reinterpret float bits as integer
-                const buffer = new ArrayBuffer(4);
-                const floatView = new Float32Array(buffer);
-                const intView = new Uint32Array(buffer);
-                floatView[0] = packedFloat;
-                const rgb = intView[0];
-
-                // Extract R, G, B bytes
-                r = ((rgb >> 16) & 0xFF) / 255;
-                g = ((rgb >> 8) & 0xFF) / 255;
-                b = (rgb & 0xFF) / 255;
+            } else if (this.mode === 'rgb' && this.rgbData && this.rgbData.length > i * 3) {
+                // Use pre-processed RGB data from native C++ parser
+                r = this.rgbData[i * 3];
+                g = this.rgbData[i * 3 + 1];
+                b = this.rgbData[i * 3 + 2];
             } else {
                 // Color by field value (gradient)
                 const fieldData = this.fieldData[this.mode];

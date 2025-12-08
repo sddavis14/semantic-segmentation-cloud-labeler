@@ -27,12 +27,18 @@ Napi::Value ParsePCD(const Napi::CallbackInfo &info) {
     header.Set("points", static_cast<int>(data.numPoints()));
     header.Set("dataType", data.header.dataType);
 
-    // Field names
+    // Field names, types, and sizes
     Napi::Array fieldNames = Napi::Array::New(env, data.header.fields.size());
+    Napi::Array fieldTypes = Napi::Array::New(env, data.header.fields.size());
+    Napi::Array fieldSizes = Napi::Array::New(env, data.header.fields.size());
     for (size_t i = 0; i < data.header.fields.size(); i++) {
       fieldNames[i] = Napi::String::New(env, data.header.fields[i].name);
+      fieldTypes[i] = Napi::String::New(env, std::string(1, data.header.fields[i].type));
+      fieldSizes[i] = Napi::Number::New(env, data.header.fields[i].size);
     }
     header.Set("fields", fieldNames);
+    header.Set("fieldTypes", fieldTypes);
+    header.Set("fieldSizes", fieldSizes);
     result.Set("header", header);
 
     // Positions as Float32Array (interleaved x,y,z)
@@ -63,6 +69,17 @@ Napi::Value ParsePCD(const Napi::CallbackInfo &info) {
       fields.Set(name, arr);
     }
     result.Set("fields", fields);
+
+    // RGB colors as Float32Array (interleaved r,g,b) - pre-processed from all formats
+    result.Set("hasRGB", Napi::Boolean::New(env, data.hasRGB()));
+    if (data.hasRGB()) {
+      auto rgb = data.getRGB();
+      Napi::Float32Array rgbArr = Napi::Float32Array::New(env, rgb.size());
+      for (size_t i = 0; i < rgb.size(); i++) {
+        rgbArr[i] = rgb[i];
+      }
+      result.Set("rgb", rgbArr);
+    }
 
     return result;
 
