@@ -33,7 +33,8 @@ Napi::Value ParsePCD(const Napi::CallbackInfo &info) {
     Napi::Array fieldSizes = Napi::Array::New(env, data.header.fields.size());
     for (size_t i = 0; i < data.header.fields.size(); i++) {
       fieldNames[i] = Napi::String::New(env, data.header.fields[i].name);
-      fieldTypes[i] = Napi::String::New(env, std::string(1, data.header.fields[i].type));
+      fieldTypes[i] =
+          Napi::String::New(env, std::string(1, data.header.fields[i].type));
       fieldSizes[i] = Napi::Number::New(env, data.header.fields[i].size);
     }
     header.Set("fields", fieldNames);
@@ -68,18 +69,19 @@ Napi::Value ParsePCD(const Napi::CallbackInfo &info) {
       }
       fields.Set(name, arr);
     }
-    result.Set("fields", fields);
 
-    // RGB colors as Float32Array (interleaved r,g,b) - pre-processed from all formats
-    result.Set("hasRGB", Napi::Boolean::New(env, data.hasRGB()));
+    // Add synthetic _color field if RGB data is available
+    // This contains interleaved r,g,b floats (normalized 0-1) for color
+    // interpretation The raw rgb/rgba fields remain as scalars above
     if (data.hasRGB()) {
       auto rgb = data.getRGB();
-      Napi::Float32Array rgbArr = Napi::Float32Array::New(env, rgb.size());
+      Napi::Float32Array colorArr = Napi::Float32Array::New(env, rgb.size());
       for (size_t i = 0; i < rgb.size(); i++) {
-        rgbArr[i] = rgb[i];
+        colorArr[i] = rgb[i];
       }
-      result.Set("rgb", rgbArr);
+      fields.Set("_color", colorArr);
     }
+    result.Set("fields", fields);
 
     return result;
 

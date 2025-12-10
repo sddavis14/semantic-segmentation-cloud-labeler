@@ -80,9 +80,7 @@ app.get('/api/pcd/parse', (req, res) => {
             },
             positions: Array.from(data.positions),
             labels: Array.from(data.labels),
-            fields: fields,
-            hasRGB: data.hasRGB || false,
-            rgb: data.rgb ? Array.from(data.rgb) : null
+            fields: fields
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

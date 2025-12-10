@@ -36,7 +36,8 @@ class App {
         this.setupSelectionEvents();
 
         // Setup callbacks
-        this.fileBrowser.onFileChanged = (file) => this.loadFile(file);
+        // Note: fileBrowser.onFileChanged is intentionally not used - navigation is handled
+        // directly via nextFile/previousFile/loadFile to ensure proper dirty state checking
         this.labelManager.onLabelsChanged = () => this.onLabelsChanged();
         this.selectionManager.onSelectionChanged = () => this.onSelectionChanged();
         this.folderModal.onFolderSelected = (path) => this.openFolderPath(path);
@@ -59,7 +60,7 @@ class App {
                 console.log('Loaded files:', count);
                 if (count > 0) {
                     await this.buildFileTree(config.initialDirectory);
-                    this.fileBrowser.goToFirst();
+                    await this.loadFirstFile();
                 }
             }
         } catch (err) {
@@ -325,17 +326,34 @@ class App {
             return;
         }
 
+        // Check for unsaved changes before switching folders
+        if (!this.confirmDiscardChanges()) {
+            return;
+        }
+
         try {
             const count = await this.fileBrowser.loadDirectory(dirPath);
 
             if (count > 0) {
                 await this.buildFileTree(dirPath);
-                this.fileBrowser.goToFirst();
+                await this.loadFirstFile();
             } else {
                 alert('No .pcd files found in the directory');
             }
         } catch (err) {
             alert(`Failed to open folder: ${err.message}`);
+        }
+    }
+
+    // Load first file in directory (for initial/folder change)
+    async loadFirstFile() {
+        if (this.fileBrowser.files.length === 0) return;
+
+        const firstFile = this.fileBrowser.files[0];
+        const success = await this.loadFileInternal(firstFile);
+        if (success) {
+            this.fileBrowser.currentIndex = 0;
+            this.updateFileTreeSelection();
         }
     }
 
@@ -405,19 +423,33 @@ class App {
         });
     }
 
+    // Check if user confirms discarding unsaved changes
+    // Returns true if no changes or user confirmed, false if user cancelled
+    confirmDiscardChanges() {
+        if (!this.labelManager.isDirty()) {
+            return true;
+        }
+        if (confirm('You have unsaved label changes that will be DISCARDED.\n\nContinue without saving?')) {
+            this.clearDirtyIndicator();
+            this.labelManager.markClean();
+            return true;
+        }
+        return false;
+    }
+
     async loadFile(file) {
         if (!file) return false;
 
         // Check for unsaved changes
-        if (this.labelManager.isDirty()) {
-            if (!confirm('You have unsaved label changes that will be DISCARDED.\n\nContinue without saving?')) {
-                return false; // User cancelled
-            }
-            // User chose to discard - clear the dirty indicator
-            this.clearDirtyIndicator();
-            this.labelManager.markClean();
+        if (!this.confirmDiscardChanges()) {
+            return false; // User cancelled
         }
 
+        return await this.loadFileInternal(file);
+    }
+
+    // Internal file loading - assumes dirty check already done
+    async loadFileInternal(file) {
         try {
             // Fetch PCD data from native parser API
             const response = await fetch(`/api/pcd/parse?path=${encodeURIComponent(file.path)}`);
@@ -439,7 +471,7 @@ class App {
             }
 
             // Update colorize dropdown with available fields
-            this.updateColorizeOptions(result.fieldNames, data.hasRGB);
+            this.updateColorizeOptions(result.fieldNames);
 
             // Update colors
             this.updateColors();
@@ -459,18 +491,48 @@ class App {
             this.updatePCDFormatLabel();
 
             console.log(`Loaded ${file.name} with ${result.pointCount} points using native parser`);
+            return true;
         } catch (err) {
             console.error('Failed to load file:', err);
             alert(`Failed to load file: ${err.message}`);
+            return false;
         }
     }
 
-    previousFile() {
-        this.fileBrowser.goToPrevious();
+    async previousFile() {
+        if (!this.fileBrowser.hasPrevious()) return;
+
+        // Check dirty BEFORE updating index
+        if (!this.confirmDiscardChanges()) {
+            return; // User cancelled - index unchanged
+        }
+
+        // Now safe to navigate
+        const prevIndex = this.fileBrowser.currentIndex - 1;
+        const prevFile = this.fileBrowser.files[prevIndex];
+        const success = await this.loadFileInternal(prevFile);
+        if (success) {
+            this.fileBrowser.currentIndex = prevIndex;
+            this.updateFileTreeSelection();
+        }
     }
 
-    nextFile() {
-        this.fileBrowser.goToNext();
+    async nextFile() {
+        if (!this.fileBrowser.hasNext()) return;
+
+        // Check dirty BEFORE updating index
+        if (!this.confirmDiscardChanges()) {
+            return; // User cancelled - index unchanged
+        }
+
+        // Now safe to navigate
+        const nextIndex = this.fileBrowser.currentIndex + 1;
+        const nextFile = this.fileBrowser.files[nextIndex];
+        const success = await this.loadFileInternal(nextFile);
+        if (success) {
+            this.fileBrowser.currentIndex = nextIndex;
+            this.updateFileTreeSelection();
+        }
     }
 
     async saveLabels() {
@@ -725,34 +787,31 @@ class App {
     }
 
     // Update colorize dropdown with available fields from PCD
-    updateColorizeOptions(fieldNames, hasRGBFromParser = false) {
+    updateColorizeOptions(fieldNames) {
         const select = document.getElementById('colorize-mode');
         const currentValue = select.value;
 
         // Clear existing options except "label"
         select.innerHTML = '<option value="label">Label</option>';
 
-        // Check if RGB fields are present (either from parser flag or separate r/g/b fields)
-        const lowerNames = (fieldNames || []).map(n => n.toLowerCase());
-        const hasSeparateRGB = lowerNames.includes('r') && lowerNames.includes('g') && lowerNames.includes('b');
-        const hasRGB = hasRGBFromParser || hasSeparateRGB;
+        // Check if synthetic _color field exists (C++ parser adds this for RGB data)
+        const hasColorField = (fieldNames || []).includes('_color');
 
-        // Add RGB option if available
-        if (hasRGB) {
+        // Add RGB Color option if _color field is available
+        if (hasColorField) {
             const rgbOption = document.createElement('option');
-            rgbOption.value = 'rgb';
+            rgbOption.value = '_color';
             rgbOption.textContent = 'RGB Color';
             select.appendChild(rgbOption);
         }
-        // Add field options
+
+        // Add field options (raw fields as scalars)
         if (fieldNames && fieldNames.length > 0) {
             for (const name of fieldNames) {
                 const lower = name.toLowerCase();
-                // Skip x, y, z as they're not useful for colorization
-                // Skip r, g, b if RGB mode is available (grouped into RGB option)
-                // Skip label since it's already added as first option
-                if (['x', 'y', 'z', 'label'].includes(lower)) continue;
-                if (hasRGB && ['r', 'g', 'b'].includes(lower)) continue;
+                // Skip coordinates and label (not useful for colorization)
+                // Skip synthetic _color field (already added as "RGB Color")
+                if (['x', 'y', 'z', 'label', '_color'].includes(lower)) continue;
 
                 const option = document.createElement('option');
                 option.value = name;
@@ -788,8 +847,8 @@ class App {
         const mode = document.getElementById('colorize-mode').value;
         const controlsDiv = document.getElementById('color-bounds-controls');
 
-        // Show controls only for scalar fields (not label or rgb)
-        const isScalarField = mode !== 'label' && mode !== 'rgb';
+        // Show controls only for scalar fields (not label or synthetic _color)
+        const isScalarField = mode !== 'label' && mode !== '_color';
         controlsDiv.style.display = isScalarField ? 'flex' : 'none';
 
         if (isScalarField) {

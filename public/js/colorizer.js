@@ -1,16 +1,14 @@
 /**
  * Colorizer - Point cloud colorization strategies with dynamic field support
- * RGB/RGBA processing is now handled by the native C++ parser
+ * RGB/RGBA processing is handled by the native C++ parser which provides a synthetic _color field
  */
 class Colorizer {
     constructor() {
-        this.mode = 'label'; // 'label', 'rgb', or any field name
+        this.mode = 'label'; // 'label', '_color' (rgb), or any field name
         this.labelColors = new Map();
-        this.fieldData = {}; // Dynamic field data from native parser
+        this.fieldData = {}; // Dynamic field data from native parser (includes synthetic _color)
         this.fieldBounds = {}; // Min/max for each field (auto-detected)
         this.customBounds = null; // User-overridden {min, max} for current field
-        this.rgbData = null; // Pre-processed RGB data from C++ (interleaved r,g,b,r,g,b,...)
-        this._hasRGB = false; // Whether RGB data is available
     }
 
     setMode(mode) {
@@ -44,13 +42,14 @@ class Colorizer {
         });
     }
 
-    // Set field data from native parser
+    // Set field data from native parser (includes synthetic _color if RGB available)
     setFieldData(fields) {
         this.fieldData = fields || {};
 
-        // Compute bounds for all numeric fields
+        // Compute bounds for all numeric fields (except _color which is special)
         this.fieldBounds = {};
         for (const [name, data] of Object.entries(this.fieldData)) {
+            if (name === '_color') continue; // Skip synthetic color field
             if (data && data.length > 0) {
                 let min = Infinity;
                 let max = -Infinity;
@@ -64,18 +63,12 @@ class Colorizer {
         }
     }
 
-    // Set pre-processed RGB data from native C++ parser
-    setRGBData(rgbArray, hasRGB) {
-        this.rgbData = rgbArray || null;
-        this._hasRGB = hasRGB || false;
-    }
-
-    // Check if RGB colorization is available
+    // Check if RGB colorization is available (synthetic _color field exists)
     hasRGBFields() {
-        return this._hasRGB;
+        return '_color' in this.fieldData;
     }
 
-    // Get available field names for colorization
+    // Get available field names for colorization (all fields from parser)
     getAvailableFields() {
         return Object.keys(this.fieldData);
     }
@@ -118,6 +111,9 @@ class Colorizer {
         const pointCount = positions.length / 3;
         const colors = new Float32Array(pointCount * 3);
 
+        // Get _color data if mode is rgb
+        const colorData = this.mode === '_color' ? this.fieldData['_color'] : null;
+
         for (let i = 0; i < pointCount; i++) {
             let r, g, b;
 
@@ -133,11 +129,11 @@ class Colorizer {
                 r = color.r;
                 g = color.g;
                 b = color.b;
-            } else if (this.mode === 'rgb' && this.rgbData && this.rgbData.length > i * 3) {
-                // Use pre-processed RGB data from native C++ parser
-                r = this.rgbData[i * 3];
-                g = this.rgbData[i * 3 + 1];
-                b = this.rgbData[i * 3 + 2];
+            } else if (this.mode === '_color' && colorData && colorData.length > i * 3) {
+                // Use synthetic _color field from C++ parser (interleaved r,g,b)
+                r = colorData[i * 3];
+                g = colorData[i * 3 + 1];
+                b = colorData[i * 3 + 2];
             } else {
                 // Color by field value (gradient)
                 const fieldData = this.fieldData[this.mode];
@@ -191,3 +187,4 @@ class Colorizer {
 }
 
 window.Colorizer = Colorizer;
+
