@@ -5,6 +5,7 @@ class FileBrowser {
     constructor() {
         this.directory = null;
         this.files = [];
+        this.tree = null; // Hierarchical structure of folders and files
         this.currentIndex = -1;
         this.onFileChanged = null;
     }
@@ -20,6 +21,7 @@ class FileBrowser {
 
             this.directory = result.directory;
             this.files = result.files;
+            this.tree = result.tree || null; // Store tree if available
             this.currentIndex = -1;
 
             return this.files.length;

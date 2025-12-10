@@ -150,6 +150,26 @@ app.post('/api/pcd/convert-format', (req, res) => {
     }
 });
 
+// Helper function to count PCD files recursively in a directory
+function countPcdFilesRecursive(dirPath) {
+    let count = 0;
+    try {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.name.startsWith('.')) continue;
+            const fullPath = path.join(dirPath, entry.name);
+            if (entry.isDirectory()) {
+                count += countPcdFilesRecursive(fullPath);
+            } else if (entry.name.toLowerCase().endsWith('.pcd')) {
+                count++;
+            }
+        }
+    } catch (e) {
+        // Ignore permission errors
+    }
+    return count;
+}
+
 // API: Browse directories (for folder picker)
 app.get('/api/browse', (req, res) => {
     let dirPath = req.query.dir || process.env.HOME || '/';
@@ -179,12 +199,11 @@ app.get('/api/browse', (req, res) => {
             if (entry.name.startsWith('.')) return; // Skip hidden files
 
             if (entry.isDirectory()) {
-                // Count PCD files in this subdirectory
+                // Count PCD files recursively in this subdirectory
                 let subPcdCount = 0;
                 try {
                     const subPath = path.join(resolvedPath, entry.name);
-                    const subEntries = fs.readdirSync(subPath);
-                    subPcdCount = subEntries.filter(e => e.toLowerCase().endsWith('.pcd')).length;
+                    subPcdCount = countPcdFilesRecursive(subPath);
                 } catch (e) {
                     // Ignore permission errors
                 }
@@ -212,9 +231,61 @@ app.get('/api/browse', (req, res) => {
     }
 });
 
-// API: List PCD files in a directory
+// Helper function to recursively scan directories for PCD files
+function scanDirectoryRecursive(dirPath, basePath) {
+    const result = {
+        name: path.basename(dirPath),
+        path: dirPath,
+        type: 'folder',
+        children: [],
+        files: []
+    };
+
+    try {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+        entries.forEach(entry => {
+            if (entry.name.startsWith('.')) return; // Skip hidden files
+
+            const fullPath = path.join(dirPath, entry.name);
+
+            if (entry.isDirectory()) {
+                // Recursively scan subdirectory
+                const subResult = scanDirectoryRecursive(fullPath, basePath);
+                // Only include folders that have PCD files somewhere
+                if (subResult.files.length > 0 || subResult.children.length > 0) {
+                    result.children.push(subResult);
+                }
+            } else if (entry.name.toLowerCase().endsWith('.pcd')) {
+                result.files.push({
+                    name: entry.name,
+                    path: fullPath,
+                    relativePath: path.relative(basePath, fullPath)
+                });
+            }
+        });
+
+        // Sort children and files alphabetically
+        result.children.sort((a, b) => a.name.localeCompare(b.name));
+        result.files.sort((a, b) => a.name.localeCompare(b.name));
+    } catch (err) {
+        console.error(`Error scanning ${dirPath}:`, err.message);
+    }
+
+    return result;
+}
+
+// Helper to flatten tree into a file list (for backwards compatibility)
+function flattenTree(node, allFiles = []) {
+    allFiles.push(...node.files);
+    node.children.forEach(child => flattenTree(child, allFiles));
+    return allFiles;
+}
+
+// API: List PCD files in a directory (recursively)
 app.get('/api/files', (req, res) => {
     const dirPath = req.query.dir;
+    const recursive = req.query.recursive !== 'false'; // Default to recursive
 
     if (!dirPath) {
         return res.status(400).json({ error: 'Directory path required' });
@@ -227,15 +298,29 @@ app.get('/api/files', (req, res) => {
     }
 
     try {
-        const files = fs.readdirSync(resolvedPath)
-            .filter(file => file.toLowerCase().endsWith('.pcd'))
-            .map(file => ({
-                name: file,
-                path: path.join(resolvedPath, file)
-            }))
-            .sort((a, b) => a.name.localeCompare(b.name));
+        if (recursive) {
+            // Scan recursively and return tree structure
+            const tree = scanDirectoryRecursive(resolvedPath, resolvedPath);
+            // Also provide a flat list of all files for navigation
+            const allFiles = flattenTree(tree);
 
-        res.json({ directory: resolvedPath, files });
+            res.json({
+                directory: resolvedPath,
+                files: allFiles,
+                tree: tree
+            });
+        } else {
+            // Non-recursive mode (original behavior)
+            const files = fs.readdirSync(resolvedPath)
+                .filter(file => file.toLowerCase().endsWith('.pcd'))
+                .map(file => ({
+                    name: file,
+                    path: path.join(resolvedPath, file)
+                }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+
+            res.json({ directory: resolvedPath, files });
+        }
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

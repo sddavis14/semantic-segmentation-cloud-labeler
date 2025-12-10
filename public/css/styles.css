@@ -370,6 +370,16 @@ input[type="range"]::-moz-range-thumb {
     text-overflow: ellipsis;
 }
 
+.tree-folder-count {
+    font-size: 10px;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+}
+
 .tree-folder-children {
     padding-left: 16px;
 }

@@ -361,12 +361,97 @@ class App {
         const treeContainer = document.getElementById('file-tree');
         treeContainer.innerHTML = '';
 
-        // Create root folder node
-        const rootName = rootPath.split('/').pop() || rootPath;
-        const rootFolder = this.createFolderNode(rootName, rootPath, this.fileBrowser.files);
-        treeContainer.appendChild(rootFolder);
+        // Use tree structure if available, otherwise fall back to flat list
+        if (this.fileBrowser.tree) {
+            const rootFolder = this.createFolderNodeFromTree(this.fileBrowser.tree);
+            treeContainer.appendChild(rootFolder);
+        } else {
+            // Fallback: flat file list
+            const rootName = rootPath.split('/').pop() || rootPath;
+            const rootFolder = this.createFolderNode(rootName, rootPath, this.fileBrowser.files);
+            treeContainer.appendChild(rootFolder);
+        }
     }
 
+    // Create folder node from tree structure (recursive)
+    createFolderNodeFromTree(treeNode) {
+        const folder = document.createElement('div');
+        folder.className = 'tree-folder';
+
+        const header = document.createElement('div');
+        header.className = 'tree-folder-header';
+
+        // Count total files in this folder and subfolders
+        const totalFiles = this.countFilesInTree(treeNode);
+        const fileCount = totalFiles > 0 ? `<span class="tree-folder-count">${totalFiles}</span>` : '';
+
+        header.innerHTML = `
+            <span class="tree-folder-toggle">▼</span>
+            <span class="tree-folder-icon">📁</span>
+            <span class="tree-folder-name">${treeNode.name}</span>
+            ${fileCount}
+        `;
+        header.addEventListener('click', () => {
+            folder.classList.toggle('collapsed');
+            header.querySelector('.tree-folder-toggle').textContent =
+                folder.classList.contains('collapsed') ? '▶' : '▼';
+        });
+        folder.appendChild(header);
+
+        const children = document.createElement('div');
+        children.className = 'tree-folder-children';
+
+        // Add subfolders first
+        treeNode.children.forEach(childFolder => {
+            const childNode = this.createFolderNodeFromTree(childFolder);
+            children.appendChild(childNode);
+        });
+
+        // Add files in current folder
+        treeNode.files.forEach(file => {
+            // Find the global index in the flat file list
+            const globalIndex = this.fileBrowser.files.findIndex(f => f.path === file.path);
+            const fileNode = this.createFileNode(file, globalIndex);
+            children.appendChild(fileNode);
+        });
+
+        folder.appendChild(children);
+        return folder;
+    }
+
+    // Count files in a tree node including all subfolders
+    countFilesInTree(treeNode) {
+        let count = treeNode.files.length;
+        treeNode.children.forEach(child => {
+            count += this.countFilesInTree(child);
+        });
+        return count;
+    }
+
+    // Create a file node element
+    createFileNode(file, globalIndex) {
+        const fileNode = document.createElement('div');
+        fileNode.className = 'tree-file';
+        fileNode.dataset.index = globalIndex;
+        fileNode.dataset.path = file.path;
+        fileNode.innerHTML = `
+            <span class="tree-file-icon">📄</span>
+            <span class="tree-file-name">${file.name}</span>
+            <span class="tree-file-dirty" title="Unsaved changes">●</span>
+        `;
+        fileNode.addEventListener('click', async () => {
+            if (globalIndex < 0) return;
+            const targetFile = this.fileBrowser.files[globalIndex];
+            const success = await this.loadFile(targetFile);
+            if (success !== false) {
+                this.fileBrowser.currentIndex = globalIndex;
+                this.updateFileTreeSelection();
+            }
+        });
+        return fileNode;
+    }
+
+    // Fallback: create folder node from flat file list
     createFolderNode(name, path, files) {
         const folder = document.createElement('div');
         folder.className = 'tree-folder';
@@ -390,25 +475,7 @@ class App {
 
         // Add PCD files
         files.forEach((file, index) => {
-            const fileNode = document.createElement('div');
-            fileNode.className = 'tree-file';
-            fileNode.dataset.index = index;
-            fileNode.dataset.path = file.path || file.name;
-            fileNode.innerHTML = `
-                <span class="tree-file-icon">📄</span>
-                <span class="tree-file-name">${file.name}</span>
-                <span class="tree-file-dirty" title="Unsaved changes">●</span>
-            `;
-            fileNode.addEventListener('click', async () => {
-                // Load file via server API
-                const targetFile = this.fileBrowser.files[index];
-                const success = await this.loadFile(targetFile);
-                if (success !== false) {
-                    // Only update index and selection if load succeeded
-                    this.fileBrowser.currentIndex = index;
-                    this.updateFileTreeSelection();
-                }
-            });
+            const fileNode = this.createFileNode(file, index);
             children.appendChild(fileNode);
         });
 
