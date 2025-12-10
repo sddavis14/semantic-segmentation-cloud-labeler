@@ -97,11 +97,11 @@ class FolderModal {
             // Update info
             const info = document.getElementById('folder-info');
             if (data.pcdCount > 0) {
-                info.textContent = `📁 ${data.pcdCount} .pcd file(s) in this folder`;
+                info.textContent = `📁 ${data.pcdCount} .pcd file(s) found`;
                 info.style.color = 'var(--success)';
                 this.selectedBrowsePath = data.current;
             } else {
-                info.textContent = 'No .pcd files here. Double-click a folder to navigate.';
+                info.textContent = 'No .pcd files found. Subfolders are scanned automatically.';
                 info.style.color = 'var(--text-secondary)';
             }
 

@@ -112,10 +112,8 @@ class PointCloudViewer {
         this.scene.add(this.points);
 
         // Set field data in colorizer for dynamic colorization
+        // This includes synthetic _color field if RGB is available
         this.colorizer.setFieldData(this.fieldData);
-
-        // Set pre-processed RGB data from native C++ parser
-        this.colorizer.setRGBData(data.rgb, data.hasRGB);
 
         // Center camera on point cloud
         this.fitCameraToPoints();
