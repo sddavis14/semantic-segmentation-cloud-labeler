@@ -41,7 +41,7 @@ A modern, web-based tool for labeling 3D LiDAR point clouds for semantic segment
 
 ```bash
 # Clone and install
-git clone <repository-url>
+git clone https://github.com/sddavis14/semantic-segmentation-cloud-labeler.git labeling_tool
 cd labeling_tool
 npm install
 
